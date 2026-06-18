@@ -232,3 +232,100 @@ Stage Summary:
 - Live badge counter in admin header with bounce-in animation; resets on click
 - WhatsApp notification scaffold in place — currently logs, ready for real integration via env vars + one function body fill-in
 - Zero changes to existing design, layout, colors, pages, database schema, product/cart/checkout/delivery logic
+
+---
+Task ID: 3
+Agent: Super Z (main)
+Task: Fix real-time order display issue — Orders page must update instantly when a new order is placed, without page refresh. Keep all existing functionality (popup, sound, badge) unchanged.
+
+Work Log:
+- Re-read current AdminOrders.tsx, AdminOverview.tsx, use-admin-socket.ts, admin store to plan minimal-impact fix
+- Root cause: use-admin-socket only fired the onNewOrder callback (used by AdminDashboard for popup/sound/badge); the AdminOrders and AdminOverview components had no way to know when new orders arrived, so they only showed fresh data after a manual reload
+
+FIX (4 small surgical changes, no UI/design/business-logic modifications):
+
+1. Added `lastNewOrderEvent` + `lastNewOrderSeq` fields and `publishNewOrderEvent()` method to the admin Zustand store (src/lib/stores/admin.ts). This is purely additive — all existing fields and methods are unchanged. The seq counter lets subscribers detect new events even if the same payload is somehow emitted twice.
+
+2. Updated use-admin-socket.ts: in the existing 'new-order' handler, ADDED one line — `useAdmin.getState().publishNewOrderEvent(event)` — right after the existing sound/badge/callback calls. All existing behavior (playNotificationSound, incrementNewOrder, onNewOrderRef.current) is unchanged. The new line just publishes the event to the shared store so other components can subscribe.
+
+3. Updated AdminOrders.tsx (src/components/mehta/admin/AdminOrders.tsx):
+   - Subscribed to lastNewOrderEvent + lastNewOrderSeq from the store
+   - Added a `seenOrderIdsRef` Set for dedup — when a new event arrives, skip if orderId is already in the set
+   - Added an eventToOrder() helper that converts a NewOrderEvent payload into a minimal Order object (with placeholder items array so items.length renders correctly)
+   - Added a useEffect that reacts to lastNewOrderSeq changes: dedupes via seenOrderIdsRef, checks if the current filter would include a PENDING order (filter is "all" or "pending"), and prepends the new order to the local state (newest first)
+   - Updated load() to refresh the seenOrderIdsRef set whenever the list is refetched (so future real-time events don't re-add orders already in the loaded list)
+   - Updated updateStatus() to update the local state immediately (no more load() refetch) — sets the new status on the order in place, and removes the order from the list if the current filter no longer matches its new status (e.g., accepting a PENDING order while on the "pending" tab removes it from view)
+   - Added openOrderDetail() function: when admin clicks "View / Print" on a real-time order (which has placeholder items), it fetches the full order with line items from /api/orders/[id] before showing the modal. A loading spinner shows during the fetch. The fetched order also replaces the placeholder in the local state so future opens don't refetch.
+   - All existing UI, styling, button labels, status badges, modal layout, and print invoice logic are unchanged.
+
+4. Updated AdminOverview.tsx (src/components/mehta/admin/AdminOverview.tsx):
+   - Subscribed to lastNewOrderSeq from the store
+   - Added a debounced useEffect that re-fetches /api/analytics 800ms after a new-order event arrives (debounce prevents N parallel API calls if multiple orders arrive in a burst)
+   - Skips the initial seq=0 (so it doesn't fire on mount — the existing initial-load effect handles that)
+   - All existing UI, charts, stat cards, and styling are unchanged.
+
+VERIFICATION (via Agent Browser + curl):
+
+1. Real-time Orders list update:
+   - Logged in as admin (admin/mehta123) → navigated to Orders tab → 3 orders visible
+   - Placed test order via curl POST /api/orders
+   - WITHOUT page refresh: new order "MSM0665515491" appeared at TOP of list (newest first)
+   - Order count updated from "3 orders" to "4 orders • Real-time updates"
+   - New order showed correct customer name, mobile, address, total (₹180), item count (2 items), PENDING badge, Accept/Reject buttons
+
+2. Dedup test:
+   - Placed 2 more orders rapidly (1 second apart)
+   - Both appeared at top of list in correct descending timestamp order
+   - Total count went from 4 → 5 → 6, no duplicates
+   - Final order list: MSM0668692277 → MSM0668589987 → MSM0665515491 → MSM0577501526 → MSM0572566818 → MSM0347363842 (newest first, correct sort)
+
+3. Real-time Overview stats update:
+   - Navigated to Overview tab → stats showed 7 total orders, ₹799 revenue, 4 pending
+   - Placed ₹430 order via curl
+   - WITHOUT page refresh (after 800ms debounce + network): stats updated to 8 total orders, ₹1229 revenue, 5 pending
+   - Today's orders/revenue also updated correctly
+
+4. View/Print modal on real-time order:
+   - Clicked "View / Print" on a real-time order (which had placeholder items)
+   - Modal opened with loading spinner → fetched full order from /api/orders/[id] → displayed real line items ("X" × 2 × ₹200 = ₹400) and full customer details
+   - Print button works (disabled during fetch to prevent printing incomplete data)
+
+5. Status change in real-time:
+   - Clicked "Accept" on the top PENDING order
+   - WITHOUT page refresh: button changed from "Accept/Reject" to "Mark Delivered" (status updated to ACCEPTED locally)
+   - Switched to Pending tab → accepted order is NOT in the list (correctly filtered out)
+   - Switched to Accepted tab → accepted order IS in the list with ACCEPTED badge
+
+6. Real-time update on filtered tab:
+   - On Pending tab (4 orders), placed new order via curl
+   - WITHOUT page refresh: new order appeared at top of Pending tab, count went from 4 → 5
+   - Verified the conditional prepend logic: new PENDING orders only appear on "all" and "pending" tabs, not on "accepted"/"delivered"/"rejected" tabs
+
+7. Regression — popup/sound/badge unchanged:
+   - Placed final test order → notification popup appeared with "New Order Received!" header, order ID, customer name, total amount, time, View Order button
+   - Badge counter incremented correctly
+   - Notification sound played (playNotificationSound call unchanged in socket hook)
+   - Toast notification also appeared
+
+8. Cleanup: removed all 7 test orders created during verification
+
+NO REGRESSIONS:
+- All existing UI preserved exactly (no styling, layout, color, or component changes)
+- All existing database tables and business logic untouched
+- All existing customer flows (browse, cart, checkout, Rajula delivery restriction) work unchanged
+- All existing admin flows (login, dashboard, products CRUD, orders management, settings, popup/announcements editing) work unchanged
+- Popup notification + sound + badge behavior unchanged
+- Admin auth security (bcrypt, 30-min inactivity, server-side guards) unchanged
+- WhatsApp scaffold unchanged
+- ESLint passes with 0 errors
+- Dev server log shows no errors
+- Mini-service still running stably on port 3003
+
+Stage Summary:
+- Orders page now updates in real-time: new orders appear at the top of the list instantly when placed, with no page refresh required
+- Dashboard statistics (total orders, today's orders, revenue, pending count, 7-day chart, best sellers) refresh automatically via debounced API refetch
+- Status changes (Accept/Reject/Mark Delivered) update the local UI immediately without reloading the list
+- View/Print modal fetches full order details on demand for real-time orders
+- Deduplication prevents the same order from appearing twice even if events are redelivered
+- Newest-first sorting maintained at all times
+- All existing functionality (popup, sound, badge, auth, WhatsApp scaffold, etc.) preserved exactly

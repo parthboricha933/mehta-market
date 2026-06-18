@@ -1,6 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
+import type { NewOrderEvent } from '@/lib/use-admin-socket'
 
 interface AdminState {
   isAuthenticated: boolean
@@ -10,6 +11,12 @@ interface AdminState {
   sessionExpiryReason: 'inactivity' | 'max_lifetime' | null
   // New-order notification badge counter
   newOrderCount: number
+  // Latest new-order event broadcast — components (Orders list, Overview stats)
+  // subscribe to this to update themselves in real-time without page refresh.
+  // `lastNewOrderSeq` is a monotonically increasing sequence number so subscribers
+  // can detect new events even if the same payload is somehow emitted twice.
+  lastNewOrderEvent: NewOrderEvent | null
+  lastNewOrderSeq: number
   setAuth: (a: { id: string; username: string; name: string | null }) => void
   logout: () => void
   setSessionExpired: (reason: 'inactivity' | 'max_lifetime') => void
@@ -17,6 +24,7 @@ interface AdminState {
   incrementNewOrder: () => void
   resetNewOrderCount: () => void
   setNewOrderCount: (n: number) => void
+  publishNewOrderEvent: (event: NewOrderEvent) => void
 }
 
 export const useAdmin = create<AdminState>((set) => ({
@@ -25,12 +33,16 @@ export const useAdmin = create<AdminState>((set) => ({
   sessionExpired: false,
   sessionExpiryReason: null,
   newOrderCount: 0,
+  lastNewOrderEvent: null,
+  lastNewOrderSeq: 0,
   setAuth: (admin) => set({ isAuthenticated: true, admin, sessionExpired: false, sessionExpiryReason: null }),
-  logout: () => set({ isAuthenticated: false, admin: null, sessionExpired: false, sessionExpiryReason: null, newOrderCount: 0 }),
+  logout: () => set({ isAuthenticated: false, admin: null, sessionExpired: false, sessionExpiryReason: null, newOrderCount: 0, lastNewOrderEvent: null, lastNewOrderSeq: 0 }),
   setSessionExpired: (reason) =>
     set({ isAuthenticated: false, admin: null, sessionExpired: true, sessionExpiryReason: reason }),
   clearSessionExpired: () => set({ sessionExpired: false, sessionExpiryReason: null }),
   incrementNewOrder: () => set((s) => ({ newOrderCount: s.newOrderCount + 1 })),
   resetNewOrderCount: () => set({ newOrderCount: 0 }),
   setNewOrderCount: (n) => set({ newOrderCount: Math.max(0, n) }),
+  publishNewOrderEvent: (event) =>
+    set((s) => ({ lastNewOrderEvent: event, lastNewOrderSeq: s.lastNewOrderSeq + 1 })),
 }))

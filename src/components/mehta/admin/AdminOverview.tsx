@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -10,6 +10,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   LineChart, Line, PieChart, Pie, Cell, Legend
 } from 'recharts'
+import { useAdmin } from '@/lib/stores/admin'
 
 interface Analytics {
   totalOrders: number
@@ -29,13 +30,37 @@ export function AdminOverview() {
   const [data, setData] = useState<Analytics | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  // Subscribe to real-time new-order events so the dashboard stats
+  // (total orders, today's orders, revenue, pending count, 7-day chart, best
+  // sellers) refresh automatically without a page reload.
+  const lastNewOrderSeq = useAdmin((s) => s.lastNewOrderSeq)
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const fetchAnalytics = () => {
     fetch('/api/analytics')
       .then((r) => r.json())
       .then(setData)
       .catch(() => {})
       .finally(() => setLoading(false))
+  }
+
+  // Initial load
+  useEffect(() => {
+    fetchAnalytics()
   }, [])
+
+  // Re-fetch analytics when a new-order event arrives. Debounced to 800ms so
+  // a burst of orders doesn't trigger N parallel API calls.
+  useEffect(() => {
+    if (lastNewOrderSeq === 0) return // skip initial
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+    refreshTimerRef.current = setTimeout(() => {
+      fetchAnalytics()
+    }, 800)
+    return () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+    }
+  }, [lastNewOrderSeq])
 
   if (loading) {
     return (

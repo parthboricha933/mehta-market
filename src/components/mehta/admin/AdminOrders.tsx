@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -14,6 +14,8 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Order } from '@/lib/types'
+import { useAdmin } from '@/lib/stores/admin'
+import type { NewOrderEvent } from '@/lib/use-admin-socket'
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: 'bg-amber-100 text-amber-800 border-amber-200',
@@ -22,21 +24,90 @@ const STATUS_COLORS: Record<string, string> = {
   REJECTED: 'bg-red-100 text-red-800 border-red-200',
 }
 
+// Build a minimal Order object from a real-time NewOrderEvent payload so it can
+// be prepended to the local list instantly. The items array is populated with
+// placeholder entries (one per itemCount) so `items.length` renders correctly;
+// when the admin opens the detail modal we fetch the full order from the API
+// to replace these placeholders with real line items.
+function eventToOrder(event: NewOrderEvent): Order {
+  return {
+    id: event.orderId,
+    orderNumber: event.orderNumber,
+    customerName: event.customerName,
+    mobile: event.mobile,
+    address: event.address,
+    landmark: '',
+    notes: '',
+    items: Array.from({ length: event.itemCount }, (_, i) => ({
+      id: `placeholder-${i}`,
+      orderId: event.orderId,
+      productId: '',
+      name: '',
+      price: 0,
+      quantity: 0,
+      image: null,
+    })),
+    subtotal: event.total,
+    deliveryCharge: 0,
+    total: event.total,
+    status: 'PENDING',
+    createdAt: event.createdAt,
+    updatedAt: event.createdAt,
+  }
+}
+
 export function AdminOrders() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const [viewing, setViewing] = useState<Order | null>(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
+
+  // Subscribe to real-time new-order events from the shared admin store.
+  // The socket hook in AdminDashboard publishes events here; we react by
+  // prepending the new order to the local list (with dedup) without reloading.
+  const lastNewOrderEvent = useAdmin((s) => s.lastNewOrderEvent)
+  const lastNewOrderSeq = useAdmin((s) => s.lastNewOrderSeq)
+  const seenOrderIdsRef = useRef<Set<string>>(new Set())
 
   const load = () => {
     setLoading(true)
     fetch(`/api/orders?status=${filter}`)
       .then((r) => r.json())
-      .then((d) => setOrders(d.orders || []))
+      .then((d) => {
+        const list: Order[] = d.orders || []
+        setOrders(list)
+        // Refresh the dedup set so future real-time events don't re-add orders
+        // that are already in the freshly loaded list.
+        seenOrderIdsRef.current = new Set(list.map((o) => o.id))
+      })
       .finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [filter])
+
+  // Real-time handler: when a new-order event arrives, prepend it to the list
+  // (only if the current filter would show a PENDING order, since new orders
+  // are always PENDING). Dedup via the seenOrderIdsRef set.
+  useEffect(() => {
+    if (!lastNewOrderEvent) return
+    const event = lastNewOrderEvent
+    // Dedup: skip if we've already seen this order id
+    if (seenOrderIdsRef.current.has(event.orderId)) return
+    seenOrderIdsRef.current.add(event.orderId)
+
+    // New orders are always PENDING. Only prepend if the current filter would
+    // include a PENDING order (i.e., filter is "all" or "pending").
+    if (filter !== 'all' && filter !== 'pending') return
+
+    const newOrder = eventToOrder(event)
+    setOrders((prev) => {
+      // Extra guard against duplicate ids in state (paranoid dedup)
+      if (prev.some((o) => o.id === newOrder.id)) return prev
+      // Prepend — newest first
+      return [newOrder, ...prev]
+    })
+  }, [lastNewOrderSeq, lastNewOrderEvent, filter])
 
   const updateStatus = async (id: string, status: string) => {
     try {
@@ -46,10 +117,47 @@ export function AdminOrders() {
         body: JSON.stringify({ status }),
       })
       toast.success(`Order ${status.toLowerCase()}`)
-      load()
-      if (viewing?.id === id) setViewing(null)
+      // Update the order in local state immediately so the UI reflects the
+      // status change without waiting for a refetch.
+      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: status.toUpperCase() as Order['status'] } : o)))
+      // If the current filter no longer matches the new status, remove the order.
+      // (e.g., after accepting a PENDING order while on the "pending" tab, it should disappear.)
+      const newStatus = status.toUpperCase()
+      if (filter !== 'all' && filter !== newStatus.toLowerCase()) {
+        setOrders((prev) => prev.filter((o) => o.id !== id))
+      }
+      if (viewing?.id === id) {
+        setViewing((v) => (v ? { ...v, status: newStatus as Order['status'] } : v))
+      }
     } catch {
       toast.error('Failed to update order')
+    }
+  }
+
+  // Fetch the full order (with line items) before opening the detail modal.
+  // This is needed for orders that arrived via real-time event (which only
+  // carry summary data), but is harmless for orders loaded from the API
+  // (it just re-fetches the same data).
+  const openOrderDetail = async (o: Order) => {
+    setViewing(o)
+    // If items are already populated with real data (name !== ''), skip refetch.
+    const hasRealItems = o.items.length > 0 && o.items.some((i) => i.name !== '')
+    if (hasRealItems) return
+    setLoadingDetail(true)
+    try {
+      const res = await fetch(`/api/orders/${o.id}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data?.order) {
+          setViewing(data.order as Order)
+          // Also update the local list so future opens don't refetch.
+          setOrders((prev) => prev.map((x) => (x.id === o.id ? { ...data.order } : x)))
+        }
+      }
+    } catch {
+      // ignore — modal will show whatever data we have
+    } finally {
+      setLoadingDetail(false)
     }
   }
 
@@ -115,7 +223,7 @@ export function AdminOrders() {
               </div>
 
               <div className="flex flex-wrap gap-1.5">
-                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setViewing(o)}>
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openOrderDetail(o)}>
                   <Eye className="h-3 w-3 mr-1" /> View / Print
                 </Button>
                 {o.status === 'PENDING' && (
@@ -150,6 +258,12 @@ export function AdminOrders() {
               </DialogTitle>
             </DialogHeader>
 
+            {loadingDetail ? (
+              <div className="py-10 flex flex-col items-center gap-3">
+                <Loader2 className="h-8 w-8 animate-spin text-brand-green" />
+                <p className="text-sm text-muted-foreground">Loading order details...</p>
+              </div>
+            ) : (
             <div id="invoice-print" className="space-y-4">
               {/* Invoice header */}
               <div className="text-center pb-3 border-b">
@@ -206,9 +320,10 @@ export function AdminOrders() {
                 Thank you for shopping with Mehta Super Market!
               </p>
             </div>
+            )}
 
             <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => window.print()}>
+              <Button variant="outline" onClick={() => window.print()} disabled={loadingDetail}>
                 <Printer className="h-4 w-4 mr-1" /> Print Invoice
               </Button>
               <DialogClose asChild>

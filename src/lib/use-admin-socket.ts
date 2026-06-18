@@ -63,12 +63,16 @@ export function useAdminSocket({ onNewOrder, enabled = true }: UseAdminSocketOpt
     })
 
     socket.on('new-order', (event: NewOrderEvent) => {
-      // Play sound + bump badge + invoke handler
+      // Play sound + bump badge + invoke handler (existing behavior — unchanged)
       try {
         playNotificationSound()
       } catch {}
       useAdmin.getState().incrementNewOrder()
       onNewOrderRef.current?.(event)
+      // ALSO publish to the shared admin store so other components (Orders list,
+      // Overview stats) can subscribe and update themselves in real-time without
+      // a page refresh. This is purely additive — no existing behavior is changed.
+      useAdmin.getState().publishNewOrderEvent(event)
     })
 
     socket.on('disconnect', () => {
