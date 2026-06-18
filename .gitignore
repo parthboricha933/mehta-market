@@ -52,3 +52,18 @@ prompt
 server.log
 # Skills directory
 /skills/
+# Database (local dev only — Vercel uses external DB)
+/db/*.db
+/db/*.db-journal
+*.sqlite
+*.sqlite3
+
+# User uploads (runtime-generated, should not be in repo)
+/public/uploads/
+
+# Scripts logs
+service.log
+*.pid
+
+# Test files
+scripts/test-*.ts
