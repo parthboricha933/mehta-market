@@ -67,3 +67,18 @@ service.log
 
 # Test files
 scripts/test-*.ts
+
+# Sandbox-internal scripts
+/.zscripts/
+
+# Internal worklog (not for public repo)
+/worklog.md
+
+# Websocket demo examples (not part of the production app)
+/examples/
+
+# Screenshots (generated during testing)
+screenshot-*.png
+
+# Empty db folder (created at runtime)
+/db/
