@@ -1,7 +1,8 @@
 // Auto-seed helper for serverless deployments (Vercel).
 // On Vercel, the SQLite database file is ephemeral — it gets recreated on each
-// cold start. This helper checks if the database is empty and seeds it with
-// the default admin + categories + settings + sample products on first access.
+// cold start. This helper:
+// 1. Pushes the Prisma schema to the (empty) database file
+// 2. Seeds it with default admin + categories + settings + sample products
 //
 // In production you should switch to a persistent database (Turso, PlanetScale,
 // Neon, etc.) — but this helper keeps the demo functional on Vercel's free tier.
@@ -54,7 +55,109 @@ export async function ensureSeeded(): Promise<void> {
 
 async function doSeed(): Promise<void> {
   try {
-    // Check if already seeded (look for any category)
+    // Try a simple query first to see if the schema exists.
+    // If it fails with "table does not exist", we need to push the schema.
+    let needsSchema = false
+    try {
+      await db.category.count()
+    } catch (e: any) {
+      // P1014 = "Unknown PRisma query engine" / P2021 = "table does not exist"
+      // P1003 = "Table does not exist"
+      needsSchema = true
+    }
+
+    if (needsSchema) {
+      // Push the schema by executing raw SQL. This is the equivalent of `prisma db push`.
+      // Use multi-statements to create all tables in one call.
+      const schemaSql = `
+        CREATE TABLE IF NOT EXISTS "Admin" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "username" TEXT NOT NULL,
+          "passwordHash" TEXT NOT NULL,
+          "name" TEXT,
+          "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" DATETIME NOT NULL,
+          CONSTRAINT "Admin_username_key" UNIQUE ("username")
+        );
+        CREATE TABLE IF NOT EXISTS "Category" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "name" TEXT NOT NULL,
+          "slug" TEXT NOT NULL,
+          "icon" TEXT,
+          "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "Category_name_key" UNIQUE ("name"),
+          CONSTRAINT "Category_slug_key" UNIQUE ("slug")
+        );
+        CREATE TABLE IF NOT EXISTS "Product" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "name" TEXT NOT NULL,
+          "description" TEXT,
+          "price" REAL NOT NULL,
+          "mrp" REAL,
+          "unit" TEXT,
+          "images" TEXT NOT NULL,
+          "categoryId" TEXT NOT NULL,
+          "stock" INTEGER NOT NULL DEFAULT 0,
+          "isActive" BOOLEAN NOT NULL DEFAULT true,
+          "soldCount" INTEGER NOT NULL DEFAULT 0,
+          "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" DATETIME NOT NULL,
+          CONSTRAINT "Product_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS "Order" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "orderNumber" TEXT NOT NULL,
+          "customerName" TEXT NOT NULL,
+          "mobile" TEXT NOT NULL,
+          "address" TEXT NOT NULL,
+          "landmark" TEXT,
+          "notes" TEXT,
+          "subtotal" REAL NOT NULL,
+          "deliveryCharge" REAL NOT NULL,
+          "total" REAL NOT NULL,
+          "status" TEXT NOT NULL DEFAULT 'PENDING',
+          "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" DATETIME NOT NULL,
+          CONSTRAINT "Order_orderNumber_key" UNIQUE ("orderNumber")
+        );
+        CREATE TABLE IF NOT EXISTS "OrderItem" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "orderId" TEXT NOT NULL,
+          "productId" TEXT NOT NULL,
+          "name" TEXT NOT NULL,
+          "price" REAL NOT NULL,
+          "quantity" INTEGER NOT NULL,
+          "image" TEXT,
+          CONSTRAINT "OrderItem_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+          CONSTRAINT "OrderItem_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS "Setting" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "key" TEXT NOT NULL,
+          "value" TEXT NOT NULL,
+          "updatedAt" DATETIME NOT NULL,
+          CONSTRAINT "Setting_key_key" UNIQUE ("key")
+        );
+        CREATE INDEX IF NOT EXISTS "Product_categoryId_idx" ON "Product"("categoryId");
+        CREATE INDEX IF NOT EXISTS "OrderItem_orderId_idx" ON "OrderItem"("orderId");
+        CREATE INDEX IF NOT EXISTS "OrderItem_productId_idx" ON "OrderItem"("productId");
+      `
+      // Execute each statement separately (SQLite doesn't support multi-statement
+      // in a single $executeRawUnsafe call reliably)
+      for (const stmt of schemaSql.split(';').map(s => s.trim()).filter(Boolean)) {
+        try {
+          await db.$executeRawUnsafe(stmt + ';')
+        } catch (e: any) {
+          // Ignore "table/index already exists" errors
+          if (!String(e?.message || '').includes('already exists')) {
+            console.error('[seed] schema stmt failed:', e?.message?.slice(0, 200))
+          }
+        }
+      }
+      console.log('[seed] Schema pushed to database')
+    }
+
+    // Now check if data needs seeding
     const catCount = await db.category.count()
     if (catCount > 0) return // already seeded
 
@@ -141,9 +244,8 @@ async function doSeed(): Promise<void> {
       },
     })
 
-    console.log('[seed] Database auto-seeded with default data on Vercel cold start')
+    console.log('[seed] Database auto-seeded with default data')
   } catch (e: any) {
-    // Don't throw — just log. The request will fail but won't crash.
-    console.error('[seed] Auto-seed failed:', e?.message)
+    console.error('[seed] Auto-seed failed:', e?.message?.slice(0, 300))
   }
 }
