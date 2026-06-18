@@ -18,7 +18,7 @@ import { AdminPopup } from './admin/AdminPopup'
 import { AdminAnnouncements } from './admin/AdminAnnouncements'
 import { NewOrderNotification } from './admin/NewOrderNotification'
 import { SessionExpiredModal } from './admin/SessionExpiredModal'
-import { useAdminSocket, type NewOrderEvent } from '@/lib/use-admin-socket'
+import { useAdminSSE, type NewOrderEvent } from '@/lib/use-admin-sse'
 import { useInactivityLogout } from '@/lib/use-inactivity-logout'
 import { primeAudioOnUserInteraction } from '@/lib/sound'
 import { toast } from 'sonner'
@@ -31,11 +31,13 @@ export function AdminDashboard() {
   const [notification, setNotification] = useState<NewOrderEvent | null>(null)
   const ordersTabRef = useRef<() => void>(() => {})
 
-  // Connect to websocket for real-time new-order notifications.
+  // Connect to SSE for real-time new-order notifications.
+  // Uses Postgres LISTEN/NOTIFY — works on both sandbox AND Vercel.
   // Only connect while authenticated AND not session-expired.
-  useAdminSocket({
+  useAdminSSE({
     enabled: !sessionExpired,
     onNewOrder: (event) => {
+      console.log('[dashboard] onNewOrder callback — showing popup for:', event.orderNumber)
       setNotification(event)
       toast.success(`New order: ${event.orderNumber}`, {
         description: `${event.customerName} • ₹${event.total.toFixed(0)}`,

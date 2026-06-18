@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { notifyNewOrder } from '@/lib/notifications/whatsapp'
 import { ensureSeeded } from '@/lib/auto-seed'
+import { notifyNewOrder as pgNotifyNewOrder } from '@/lib/pg-helper'
 
 export async function GET(req: NextRequest) {
   await ensureSeeded()
@@ -37,6 +38,8 @@ export async function POST(req: NextRequest) {
 
     const orderNumber = 'MSM' + Date.now().toString().slice(-8) + Math.floor(Math.random() * 99)
 
+    console.log('[orders] Saving order to database:', orderNumber)
+
     const order = await db.order.create({
       data: {
         orderNumber,
@@ -62,6 +65,8 @@ export async function POST(req: NextRequest) {
       include: { items: true },
     })
 
+    console.log('[orders] Order saved to database:', order.orderNumber, '| ID:', order.id)
+
     // Update soldCount for each product
     for (const item of items) {
       await db.product.update({
@@ -70,9 +75,11 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // --- Real-time admin notification (non-blocking, fire-and-forget) ---
-    // Broadcast to all connected admin dashboards via the WebSocket mini-service.
-    // Failures are silently ignored so they never affect order creation.
+    // --- REAL-TIME NOTIFICATION via Postgres LISTEN/NOTIFY ---
+    // This is the PRIMARY real-time mechanism. It works on both sandbox AND Vercel.
+    // After saving the order, we issue a NOTIFY on the 'new_order' channel.
+    // The /api/admin/events SSE endpoint is LISTENing and pushes the event to all
+    // connected admin dashboards instantly.
     try {
       const event = {
         orderId: order.id,
@@ -84,23 +91,18 @@ export async function POST(req: NextRequest) {
         itemCount: order.items.length,
         createdAt: order.createdAt.toISOString(),
       }
-      // Internal call to the mini-service. Use localhost directly since this is
-      // server-to-server within the same sandbox (not subject to the XTransformPort
-      // gateway rule which only applies to browser-initiated requests).
-      fetch('http://localhost:3003/broadcast', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(event),
-      }).catch(() => {})
-    } catch {
-      // swallow — never affect order creation
+      console.log('[orders] Emitting NOTIFY new_order for:', order.orderNumber)
+      // This issues: NOTIFY new_order, '<json>'
+      // Non-blocking but we await it to ensure the notification is sent before responding
+      await pgNotifyNewOrder(event)
+      console.log('[orders] NOTIFY sent successfully for:', order.orderNumber)
+    } catch (e: any) {
+      console.error('[orders] NOTIFY failed (non-fatal):', e.message)
+      // Non-fatal — order is already saved. SSE catch-up will handle it on next reconnect.
     }
 
     // --- WhatsApp notification scaffold (non-blocking, fire-and-forget) ---
-    // Currently a stub (logs only). When WhatsApp credentials are configured,
-    // this will send a real message to the shop admin without any code changes here.
     try {
-      // Look up admin WhatsApp number from shop_info settings (best-effort).
       const shopInfoSetting = await db.setting.findFirst({ where: { key: 'shop_info' } })
       let adminWhatsApp: string | undefined
       if (shopInfoSetting) {
@@ -109,7 +111,6 @@ export async function POST(req: NextRequest) {
           adminWhatsApp = parsed?.whatsapp
         } catch {}
       }
-      // Fire-and-forget; notifyNewOrder itself swallows errors.
       notifyNewOrder(
         {
           orderNumber: order.orderNumber,

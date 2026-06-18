@@ -53,8 +53,10 @@ export function AdminOverview() {
   // a burst of orders doesn't trigger N parallel API calls.
   useEffect(() => {
     if (lastNewOrderSeq === 0) return // skip initial
+    console.log('[overview] 📊 Real-time event received, refreshing analytics (seq:', lastNewOrderSeq, ')')
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
     refreshTimerRef.current = setTimeout(() => {
+      console.log('[overview] Fetching fresh analytics...')
       fetchAnalytics()
     }, 800)
     return () => {

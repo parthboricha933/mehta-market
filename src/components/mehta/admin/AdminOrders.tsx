@@ -64,7 +64,7 @@ export function AdminOrders() {
   const [loadingDetail, setLoadingDetail] = useState(false)
 
   // Subscribe to real-time new-order events from the shared admin store.
-  // The socket hook in AdminDashboard publishes events here; we react by
+  // The SSE hook in AdminDashboard publishes events here; we react by
   // prepending the new order to the local list (with dedup) without reloading.
   const lastNewOrderEvent = useAdmin((s) => s.lastNewOrderEvent)
   const lastNewOrderSeq = useAdmin((s) => s.lastNewOrderSeq)
@@ -80,31 +80,45 @@ export function AdminOrders() {
         // Refresh the dedup set so future real-time events don't re-add orders
         // that are already in the freshly loaded list.
         seenOrderIdsRef.current = new Set(list.map((o) => o.id))
+        console.log('[orders] Loaded', list.length, 'orders from API, dedup set updated')
       })
       .finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [filter])
 
-  // Real-time handler: when a new-order event arrives, prepend it to the list
-  // (only if the current filter would show a PENDING order, since new orders
-  // are always PENDING). Dedup via the seenOrderIdsRef set.
+  // Real-time handler: when a new-order event arrives via SSE (published to the
+  // store by the useAdminSSE hook), prepend it to the list instantly.
+  // Dedup via the seenOrderIdsRef set prevents duplicate entries.
   useEffect(() => {
     if (!lastNewOrderEvent) return
     const event = lastNewOrderEvent
+    console.log('[orders] 📦 Real-time event received:', event.orderNumber, '| seq:', lastNewOrderSeq, '| filter:', filter)
+
     // Dedup: skip if we've already seen this order id
-    if (seenOrderIdsRef.current.has(event.orderId)) return
+    if (seenOrderIdsRef.current.has(event.orderId)) {
+      console.log('[orders] ⏭️ Skipping duplicate order:', event.orderNumber)
+      return
+    }
     seenOrderIdsRef.current.add(event.orderId)
+    console.log('[orders] ✅ Added to dedup set:', event.orderId)
 
     // New orders are always PENDING. Only prepend if the current filter would
     // include a PENDING order (i.e., filter is "all" or "pending").
-    if (filter !== 'all' && filter !== 'pending') return
+    if (filter !== 'all' && filter !== 'pending') {
+      console.log('[orders] ⏭️ Skipping — current filter:', filter, '(order is PENDING)')
+      return
+    }
 
     const newOrder = eventToOrder(event)
     setOrders((prev) => {
       // Extra guard against duplicate ids in state (paranoid dedup)
-      if (prev.some((o) => o.id === newOrder.id)) return prev
+      if (prev.some((o) => o.id === newOrder.id)) {
+        console.log('[orders] ⏭️ Order already in state, not adding')
+        return prev
+      }
       // Prepend — newest first
+      console.log('[orders] ✅ Prepending new order to list. New count:', prev.length + 1)
       return [newOrder, ...prev]
     })
   }, [lastNewOrderSeq, lastNewOrderEvent, filter])
