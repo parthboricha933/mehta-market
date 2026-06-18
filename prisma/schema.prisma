@@ -1,0 +1,83 @@
+// Prisma schema for Mehta Super Market, Rajula
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  slug      String    @unique
+  icon      String?
+  products  Product[]
+  createdAt DateTime  @default(now())
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  mrp         Float?
+  unit        String?
+  images      String   // JSON array of image URLs
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  stock       Int      @default(0)
+  isActive    Boolean  @default(true)
+  soldCount   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orderItems  OrderItem[]
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  orderNumber   String      @unique
+  customerName  String
+  mobile        String
+  address       String
+  landmark      String?
+  notes         String?
+  items         OrderItem[]
+  subtotal      Float
+  deliveryCharge Float
+  total         Float
+  status        String      @default("PENDING") // PENDING, ACCEPTED, REJECTED, DELIVERED
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  name      String
+  price     Float
+  quantity  Int
+  image     String?
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   // JSON encoded value
+  updatedAt DateTime @updatedAt
+}

@@ -1,0 +1,21 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+
+export async function GET() {
+  const categories = await db.category.findMany({
+    orderBy: { name: 'asc' },
+    include: { _count: { select: { products: true } } },
+  })
+  return NextResponse.json({ categories })
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const { name, slug, icon } = await req.json()
+    if (!name || !slug) return NextResponse.json({ error: 'Name and slug required' }, { status: 400 })
+    const category = await db.category.create({ data: { name, slug, icon } })
+    return NextResponse.json({ category })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
+}

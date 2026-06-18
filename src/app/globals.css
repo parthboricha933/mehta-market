@@ -1,0 +1,219 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  /* Mehta Super Market brand colors */
+  --color-brand-green: #1a7a3c;
+  --color-brand-green-light: #2ea553;
+  --color-brand-green-dark: #0f5327;
+  --color-brand-orange: #ff7a1a;
+  --color-brand-orange-light: #ffa050;
+  --color-brand-orange-dark: #d65f00;
+  --color-brand-cream: #fff8ee;
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: #ffffff;
+  --foreground: #0f1a14;
+  --card: #ffffff;
+  --card-foreground: #0f1a14;
+  --popover: #ffffff;
+  --popover-foreground: #0f1a14;
+  /* Green primary */
+  --primary: #1a7a3c;
+  --primary-foreground: #ffffff;
+  /* Orange accent */
+  --secondary: #fff1e2;
+  --secondary-foreground: #d65f00;
+  --muted: #f5f7f5;
+  --muted-foreground: #5a6b62;
+  --accent: #ff7a1a;
+  --accent-foreground: #ffffff;
+  --destructive: #dc2626;
+  --border: #e3e8e4;
+  --input: #e3e8e4;
+  --ring: #1a7a3c;
+  --chart-1: #1a7a3c;
+  --chart-2: #ff7a1a;
+  --chart-3: #2ea553;
+  --chart-4: #ffa050;
+  --chart-5: #d65f00;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f1a14;
+  --sidebar-primary: #1a7a3c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f5f7f5;
+  --sidebar-accent-foreground: #0f1a14;
+  --sidebar-border: #e3e8e4;
+  --sidebar-ring: #1a7a3c;
+}
+
+.dark {
+  --background: #0d1611;
+  --foreground: #f0f5f2;
+  --card: #14201a;
+  --card-foreground: #f0f5f2;
+  --popover: #14201a;
+  --popover-foreground: #f0f5f2;
+  --primary: #2ea553;
+  --primary-foreground: #ffffff;
+  --secondary: #1f2e25;
+  --secondary-foreground: #ffa050;
+  --muted: #1a2620;
+  --muted-foreground: #8a9b91;
+  --accent: #ff7a1a;
+  --accent-foreground: #ffffff;
+  --destructive: #f87171;
+  --border: #243029;
+  --input: #243029;
+  --ring: #2ea553;
+  --chart-1: #2ea553;
+  --chart-2: #ff7a1a;
+  --chart-3: #4abd6d;
+  --chart-4: #ffa050;
+  --chart-5: #d65f00;
+  --sidebar: #14201a;
+  --sidebar-foreground: #f0f5f2;
+  --sidebar-primary: #2ea553;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1f2e25;
+  --sidebar-accent-foreground: #f0f5f2;
+  --sidebar-border: #243029;
+  --sidebar-ring: #2ea553;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv01";
+  }
+}
+
+/* Marquee animation for announcement bar */
+@keyframes marquee {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+  white-space: nowrap;
+  display: inline-block;
+}
+.marquee-container:hover .animate-marquee {
+  animation-play-state: paused;
+}
+
+/* Slow marquee variant */
+@keyframes marquee-slow {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+.animate-marquee-slow {
+  animation: marquee-slow 45s linear infinite;
+  white-space: nowrap;
+  display: inline-block;
+}
+
+/* Loading shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Hide scrollbar for category pills */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Smooth scroll */
+html { scroll-behavior: smooth; }
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c5d1c9; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #1a7a3c; }
+
+/* Gradient text */
+.text-gradient {
+  background: linear-gradient(135deg, #1a7a3c 0%, #2ea553 50%, #ff7a1a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Floating animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.animate-float { animation: float 3s ease-in-out infinite; }
+
+/* Pulse glow */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 122, 26, 0.4); }
+  50% { box-shadow: 0 0 0 12px rgba(255, 122, 26, 0); }
+}
+.animate-pulse-glow { animation: pulse-glow 2s infinite; }
+
+/* Slide in from right */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.animate-slide-in-right { animation: slide-in-right 0.3s ease-out; }
+
+/* Bounce in */
+@keyframes bounce-in {
+  0% { transform: scale(0.5); opacity: 0; }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-bounce-in { animation: bounce-in 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55); }

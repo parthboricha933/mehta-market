@@ -1,0 +1,38 @@
+{
+  "name": "Mehta Super Market, Rajula",
+  "short_name": "Mehta Market",
+  "description": "Fresh Groceries Delivered to Your Doorstep in Rajula",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1a7a3c",
+  "orientation": "portrait-primary",
+  "categories": ["shopping", "food", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Shop Now",
+      "short_name": "Shop",
+      "url": "/?view=shop",
+      "description": "Browse our products"
+    },
+    {
+      "name": "Track Order",
+      "short_name": "Orders",
+      "url": "/"
+    }
+  ]
+}
