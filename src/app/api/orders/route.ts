@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { notifyNewOrder } from '@/lib/notifications/whatsapp'
+import { ensureSeeded } from '@/lib/auto-seed'
 
 export async function GET(req: NextRequest) {
+  await ensureSeeded()
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
   const where: any = {}
@@ -16,6 +18,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  await ensureSeeded()
   try {
     const body = await req.json()
     const { customerName, mobile, address, landmark, notes, items, subtotal, deliveryCharge, total } = body

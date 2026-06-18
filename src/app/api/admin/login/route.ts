@@ -4,9 +4,11 @@ import {
   hashPassword, verifyPassword, isPasswordHashed, createSessionToken,
   setSessionCookie, type SessionPayload,
 } from '@/lib/auth'
+import { ensureSeeded } from '@/lib/auto-seed'
 
 // Secure admin login: bcrypt-hashed password verification + session-based cookie.
 export async function POST(req: NextRequest) {
+  await ensureSeeded()
   try {
     const { username, password } = await req.json()
     if (!username || !password) {

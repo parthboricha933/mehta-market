@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { ensureSeeded } from '@/lib/auto-seed'
 
 export async function GET() {
+  await ensureSeeded()
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 

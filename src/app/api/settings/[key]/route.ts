@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/api-auth'
+import { ensureSeeded } from '@/lib/auto-seed'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ key: string }> }) {
+  await ensureSeeded()
   const { key } = await params
   const setting = await db.setting.findFirst({ where: { key } })
   if (!setting) return NextResponse.json({ value: null })

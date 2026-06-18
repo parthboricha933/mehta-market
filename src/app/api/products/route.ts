@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/api-auth'
+import { ensureSeeded } from '@/lib/auto-seed'
 
 export async function GET(req: NextRequest) {
+  await ensureSeeded()
   const { searchParams } = new URL(req.url)
   const category = searchParams.get('category')
   const search = searchParams.get('search')
