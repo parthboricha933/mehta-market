@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAdmin } from '@/lib/api-auth'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ key: string }> }) {
   const { key } = await params
@@ -14,6 +15,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ key
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ key: string }> }) {
   const { key } = await params
+  const guard = await requireAdmin(req)
+  if (guard) return guard
   try {
     const { value } = await req.json()
     const setting = await db.setting.upsert({

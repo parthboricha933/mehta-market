@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAdmin } from '@/lib/api-auth'
 
 export async function GET() {
   const categories = await db.category.findMany({
@@ -10,6 +11,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const guard = await requireAdmin(req)
+  if (guard) return guard
   try {
     const { name, slug, icon } = await req.json()
     if (!name || !slug) return NextResponse.json({ error: 'Name and slug required' }, { status: 400 })

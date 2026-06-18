@@ -1,5 +1,6 @@
 // Seed script for Mehta Super Market
 import { db } from '../src/lib/db'
+import { hashPassword } from '../src/lib/auth'
 
 const CATEGORIES = [
   { name: 'Grocery', slug: 'grocery', icon: 'ShoppingBasket' },
@@ -77,10 +78,11 @@ async function main() {
   // Create admin
   const existingAdmin = await db.admin.findFirst({ where: { username: 'admin' } })
   if (!existingAdmin) {
+    const hashed = await hashPassword('mehta123')
     await db.admin.create({
       data: {
         username: 'admin',
-        passwordHash: 'mehta123',
+        passwordHash: hashed,
         name: 'Mehta Admin',
       },
     })

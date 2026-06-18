@@ -14,6 +14,7 @@ import { CartDrawer } from '@/components/mehta/CartDrawer'
 import { FloatingButtons } from '@/components/mehta/FloatingButtons'
 import { AdminLoginPage } from '@/components/mehta/AdminLoginPage'
 import { AdminDashboard } from '@/components/mehta/AdminDashboard'
+import { SessionExpiredModal } from '@/components/mehta/admin/SessionExpiredModal'
 import { useNav } from '@/lib/stores/nav'
 import { useAdmin } from '@/lib/stores/admin'
 import type { Product, Category, OfferPopup as OfferPopupType, ShopInfo } from '@/lib/types'
@@ -53,6 +54,9 @@ export default function Home() {
       .then((d) => {
         if (d?.authenticated) {
           setAuth(d.admin)
+        } else if (d?.expired) {
+          // Server says session expired — surface that to the admin store
+          useAdmin.getState().setSessionExpired(d.reason || 'inactivity')
         }
       })
       .catch(() => {})
@@ -69,10 +73,11 @@ export default function Home() {
   }, [setView, setAuth])
 
   // Redirect to admin dashboard if authenticated and on admin-login
+  // Redirect to admin login if not authenticated and trying to view admin dashboard
   useEffect(() => {
-    const isAdminAuthed = useAdmin.getState().isAuthenticated
-    if (view === 'admin-login' && isAdminAuthed) setView('admin')
-    if (view === 'admin' && !isAdminAuthed) setView('admin-login')
+    const { isAuthenticated, sessionExpired } = useAdmin.getState()
+    if (view === 'admin-login' && isAuthenticated && !sessionExpired) setView('admin')
+    if (view === 'admin' && (!isAuthenticated || sessionExpired)) setView('admin-login')
   }, [view, setView])
 
   // Loading screen
@@ -99,6 +104,7 @@ export default function Home() {
       <div className="min-h-screen bg-gradient-to-br from-brand-cream via-white to-brand-green/5">
         <AdminLoginPage />
         <OfferPopup popup={offerPopup} />
+        <SessionExpiredModal />
       </div>
     )
   }

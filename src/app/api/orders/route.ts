@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { notifyNewOrder } from '@/lib/notifications/whatsapp'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -64,6 +65,61 @@ export async function POST(req: NextRequest) {
         where: { id: item.productId },
         data: { soldCount: { increment: item.quantity } },
       })
+    }
+
+    // --- Real-time admin notification (non-blocking, fire-and-forget) ---
+    // Broadcast to all connected admin dashboards via the WebSocket mini-service.
+    // Failures are silently ignored so they never affect order creation.
+    try {
+      const event = {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        mobile: order.mobile,
+        address: order.address,
+        total: order.total,
+        itemCount: order.items.length,
+        createdAt: order.createdAt.toISOString(),
+      }
+      // Internal call to the mini-service. Use localhost directly since this is
+      // server-to-server within the same sandbox (not subject to the XTransformPort
+      // gateway rule which only applies to browser-initiated requests).
+      fetch('http://localhost:3003/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(event),
+      }).catch(() => {})
+    } catch {
+      // swallow — never affect order creation
+    }
+
+    // --- WhatsApp notification scaffold (non-blocking, fire-and-forget) ---
+    // Currently a stub (logs only). When WhatsApp credentials are configured,
+    // this will send a real message to the shop admin without any code changes here.
+    try {
+      // Look up admin WhatsApp number from shop_info settings (best-effort).
+      const shopInfoSetting = await db.setting.findFirst({ where: { key: 'shop_info' } })
+      let adminWhatsApp: string | undefined
+      if (shopInfoSetting) {
+        try {
+          const parsed = JSON.parse(shopInfoSetting.value)
+          adminWhatsApp = parsed?.whatsapp
+        } catch {}
+      }
+      // Fire-and-forget; notifyNewOrder itself swallows errors.
+      notifyNewOrder(
+        {
+          orderNumber: order.orderNumber,
+          customerName: order.customerName,
+          mobile: order.mobile,
+          address: order.address,
+          total: order.total,
+          items: order.items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price })),
+        },
+        adminWhatsApp,
+      ).catch(() => {})
+    } catch {
+      // swallow
     }
 
     return NextResponse.json({ order })

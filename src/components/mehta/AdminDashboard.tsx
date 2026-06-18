@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -16,12 +16,53 @@ import { AdminOrders } from './admin/AdminOrders'
 import { AdminCategories } from './admin/AdminCategories'
 import { AdminPopup } from './admin/AdminPopup'
 import { AdminAnnouncements } from './admin/AdminAnnouncements'
+import { NewOrderNotification } from './admin/NewOrderNotification'
+import { SessionExpiredModal } from './admin/SessionExpiredModal'
+import { useAdminSocket, type NewOrderEvent } from '@/lib/use-admin-socket'
+import { useInactivityLogout } from '@/lib/use-inactivity-logout'
+import { primeAudioOnUserInteraction } from '@/lib/sound'
+import { toast } from 'sonner'
 
 export function AdminDashboard() {
-  const { admin, logout } = useAdmin()
+  const { admin, logout, newOrderCount, resetNewOrderCount, sessionExpired } = useAdmin()
   const setView = useNav((s) => s.setView)
   const [tab, setTab] = useState('overview')
   const [mobileNav, setMobileNav] = useState(false)
+  const [notification, setNotification] = useState<NewOrderEvent | null>(null)
+  const ordersTabRef = useRef<() => void>(() => {})
+
+  // Connect to websocket for real-time new-order notifications.
+  // Only connect while authenticated AND not session-expired.
+  useAdminSocket({
+    enabled: !sessionExpired,
+    onNewOrder: (event) => {
+      setNotification(event)
+      toast.success(`New order: ${event.orderNumber}`, {
+        description: `${event.customerName} • ₹${event.total.toFixed(0)}`,
+        duration: 8000,
+      })
+    },
+  })
+
+  // 30-minute inactivity auto-logout
+  useInactivityLogout()
+
+  // Prime audio context on first user interaction (so notification sound can play later)
+  useEffect(() => {
+    const cleanup = primeAudioOnUserInteraction()
+    return cleanup
+  }, [])
+
+  // Initial badge count: fetch pending orders count on mount
+  useEffect(() => {
+    fetch('/api/orders?status=pending')
+      .then((r) => r.json())
+      .then((d) => {
+        const count = d?.orders?.length || 0
+        useAdmin.getState().setNewOrderCount(count)
+      })
+      .catch(() => {})
+  }, [])
 
   const handleLogout = async () => {
     try {
@@ -29,6 +70,12 @@ export function AdminDashboard() {
     } catch {}
     logout()
     setView('home')
+  }
+
+  const handleViewOrder = (orderId: string) => {
+    // Switch to orders tab and trigger refresh; the AdminOrders component reloads when tab changes.
+    setTab('orders')
+    resetNewOrderCount()
   }
 
   const navItems = [
@@ -52,6 +99,24 @@ export function AdminDashboard() {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
+            {/* Live new-order badge with bell icon */}
+            <button
+              onClick={() => { setTab('orders'); resetNewOrderCount() }}
+              className="relative h-9 w-9 grid place-items-center rounded-full bg-white/15 hover:bg-white/25 transition"
+              aria-label={`View orders, ${newOrderCount} new`}
+              title={`${newOrderCount} new order${newOrderCount === 1 ? '' : 's'}`}
+            >
+              <Bell className="h-4 w-4" />
+              {newOrderCount > 0 && (
+                <span
+                  key={newOrderCount}
+                  className="absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 grid place-items-center bg-brand-orange text-white text-[10px] font-bold rounded-full shadow-md animate-bounce-in"
+                >
+                  {newOrderCount > 99 ? '99+' : newOrderCount}
+                </span>
+              )}
+            </button>
+
             <span className="hidden sm:inline text-sm text-white/80">
               Hi, {admin?.name || admin?.username}
             </span>
@@ -118,6 +183,16 @@ export function AdminDashboard() {
           </main>
         </div>
       </div>
+
+      {/* Real-time new order notification popup */}
+      <NewOrderNotification
+        event={notification}
+        onClose={() => setNotification(null)}
+        onView={handleViewOrder}
+      />
+
+      {/* Session expired modal (auto-logout after 30 min inactivity) */}
+      <SessionExpiredModal />
     </div>
   )
 }
