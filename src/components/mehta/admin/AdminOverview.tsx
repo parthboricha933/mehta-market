@@ -89,28 +89,28 @@ export function AdminOverview() {
       <h1 className="text-2xl font-extrabold text-foreground">Dashboard Overview</h1>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         {stats.map((s, i) => (
-          <Card key={i} className={`p-4 text-white bg-gradient-to-br ${s.color} shadow-md`}>
+          <Card key={i} className={`p-3 sm:p-4 text-white bg-gradient-to-br ${s.color} shadow-md overflow-hidden`}>
             <div className="flex items-start justify-between mb-2">
-              <div className="text-xs font-semibold text-white/85 uppercase tracking-wide">{s.label}</div>
-              <s.icon className="h-5 w-5 text-white/70" />
+              <div className="text-[10px] sm:text-xs font-semibold text-white/85 uppercase tracking-wide">{s.label}</div>
+              <s.icon className="h-4 w-4 sm:h-5 sm:w-5 text-white/70 flex-shrink-0" />
             </div>
-            <div className="text-2xl font-extrabold">{s.value}</div>
-            <div className="text-xs text-white/80 mt-1">{s.sub}</div>
+            <div className="text-lg sm:text-2xl font-extrabold">{s.value}</div>
+            <div className="text-[10px] sm:text-xs text-white/80 mt-1">{s.sub}</div>
           </Card>
         ))}
       </div>
 
       {/* Sales last 7 days */}
-      <Card className="p-5">
+      <Card className="p-3 sm:p-5 overflow-hidden">
         <h2 className="font-bold text-foreground mb-1 flex items-center gap-2">
           <TrendingUp className="h-5 w-5 text-brand-green" /> Sales - Last 7 Days
         </h2>
         <p className="text-xs text-muted-foreground mb-4">Daily revenue trend</p>
-        <div className="h-64">
+        <div className="h-56 sm:h-64 w-full overflow-hidden">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data.salesByDay}>
+            <BarChart data={data.salesByDay} margin={{ left: -20, right: 5, top: 5, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e3e8e4" />
               <XAxis dataKey="label" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
@@ -126,7 +126,7 @@ export function AdminOverview() {
 
       <div className="grid lg:grid-cols-2 gap-4">
         {/* Best selling */}
-        <Card className="p-5">
+        <Card className="p-3 sm:p-5 overflow-hidden">
           <h2 className="font-bold text-foreground mb-1 flex items-center gap-2">
             <Award className="h-5 w-5 text-brand-orange" /> Best Selling Products
           </h2>
@@ -137,19 +137,19 @@ export function AdminOverview() {
             ) : (
               data.bestSelling.map((p, i) => (
                 <div key={p.id} className="flex items-center gap-3">
-                  <div className={`h-7 w-7 rounded-full grid place-items-center text-xs font-extrabold text-white ${
+                  <div className={`h-7 w-7 rounded-full grid place-items-center text-xs font-extrabold text-white flex-shrink-0 ${
                     i === 0 ? 'bg-amber-500' : i === 1 ? 'bg-slate-400' : i === 2 ? 'bg-amber-700' : 'bg-muted-foreground'
                   }`}>{i + 1}</div>
                   <img
                     src={p.images?.[0] || 'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=80&q=70'}
                     alt={p.name}
-                    className="h-10 w-10 rounded-md object-cover bg-muted"
+                    className="h-10 w-10 rounded-md object-cover bg-muted flex-shrink-0"
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold line-clamp-1">{p.name}</p>
-                    <p className="text-xs text-muted-foreground">{p.category || 'Uncategorized'} • ₹{p.price.toFixed(0)}</p>
+                    <p className="text-xs text-muted-foreground truncate">{p.category || 'Uncategorized'} • ₹{p.price.toFixed(0)}</p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right flex-shrink-0">
                     <div className="text-sm font-bold text-brand-green">{p.soldCount}</div>
                     <div className="text-[10px] text-muted-foreground">sold</div>
                   </div>
@@ -160,12 +160,12 @@ export function AdminOverview() {
         </Card>
 
         {/* Category distribution */}
-        <Card className="p-5">
+        <Card className="p-3 sm:p-5 overflow-hidden">
           <h2 className="font-bold text-foreground mb-1 flex items-center gap-2">
             <Package className="h-5 w-5 text-brand-green" /> Products by Category
           </h2>
           <p className="text-xs text-muted-foreground mb-4">Inventory distribution</p>
-          <div className="h-56">
+          <div className="h-56 w-full overflow-hidden">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie

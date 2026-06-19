@@ -119,21 +119,21 @@ export function AdminDashboard() {
   ]
 
   return (
-    <div className="min-h-screen bg-muted/30">
+    <div className="min-h-screen bg-muted/30 overflow-x-hidden">
       {/* Top admin bar */}
       <header className="sticky top-0 z-30 bg-brand-green text-white shadow-lg">
-        <div className="container mx-auto px-4 h-14 flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-white grid place-items-center text-brand-green font-extrabold">M</div>
-          <div className="leading-none">
-            <div className="font-bold text-sm">Mehta Super Market</div>
+        <div className="px-4 h-14 flex items-center gap-2 sm:gap-3 max-w-7xl mx-auto">
+          <div className="h-8 w-8 rounded-lg bg-white grid place-items-center text-brand-green font-extrabold flex-shrink-0">M</div>
+          <div className="leading-none min-w-0">
+            <div className="font-bold text-sm truncate">Mehta Super Market</div>
             <div className="text-[10px] text-white/70">Admin Dashboard</div>
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
             {/* Live new-order badge with bell icon */}
             <button
               onClick={() => { setTab('orders'); resetNewOrderCount() }}
-              className="relative h-9 w-9 grid place-items-center rounded-full bg-white/15 hover:bg-white/25 transition"
+              className="relative h-9 w-9 grid place-items-center rounded-full bg-white/15 hover:bg-white/25 transition flex-shrink-0"
               aria-label={`View orders, ${newOrderCount} new`}
               title={`${newOrderCount} new order${newOrderCount === 1 ? '' : 's'}`}
             >
@@ -155,15 +155,16 @@ export function AdminDashboard() {
               onClick={handleLogout}
               size="sm"
               variant="ghost"
-              className="text-white hover:bg-white/15 hover:text-white"
+              className="text-white hover:bg-white/15 hover:text-white flex-shrink-0"
             >
-              <LogOut className="h-4 w-4 mr-1" /> Logout
+              <LogOut className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Logout</span>
             </Button>
           </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-5">
+      <div className="px-4 py-5 max-w-7xl mx-auto">
         <div className="grid lg:grid-cols-[220px_1fr] gap-5">
           {/* Sidebar (desktop) */}
           <aside className="hidden lg:block">
@@ -186,13 +187,13 @@ export function AdminDashboard() {
           </aside>
 
           {/* Mobile tab selector */}
-          <div className="lg:hidden -mx-4 px-4 mb-2">
+          <div className="lg:hidden mb-2">
             <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
               {navItems.map((n) => (
                 <button
                   key={n.value}
                   onClick={() => setTab(n.value)}
-                  className={`px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 ${
+                  className={`px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 flex-shrink-0 ${
                     tab === n.value ? 'bg-brand-green text-white' : 'bg-white border border-border'
                   }`}
                 >
@@ -204,7 +205,7 @@ export function AdminDashboard() {
           </div>
 
           {/* Main content */}
-          <main className="min-w-0">
+          <main className="min-w-0 overflow-x-hidden">
             {tab === 'overview' && <AdminOverview />}
             {tab === 'orders' && <AdminOrders highlightOrderId={highlightOrderId} />}
             {tab === 'products' && <AdminProducts />}
