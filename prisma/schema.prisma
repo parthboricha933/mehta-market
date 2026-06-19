@@ -44,6 +44,7 @@ model Product {
   price       Float
   mrp         Float?
   unit        String?
+  brand       String?
   images      String   // JSON array of image URLs
   categoryId  String
   category    Category @relation(fields: [categoryId], references: [id])
