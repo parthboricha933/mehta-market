@@ -23,6 +23,9 @@ export default function Home() {
   const view = useNav((s) => s.view)
   const setView = useNav((s) => s.setView)
   const setAuth = useAdmin((s) => s.setAuth)
+  // Subscribe to auth state reactively so the redirect effect fires when login succeeds
+  const isAuthenticated = useAdmin((s) => s.isAuthenticated)
+  const sessionExpired = useAdmin((s) => s.sessionExpired)
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [offerPopup, setOfferPopup] = useState<OfferPopupType | null>(null)
@@ -61,10 +64,14 @@ export default function Home() {
       })
       .catch(() => {})
 
-    // Check URL for admin view
+    // Check URL for admin view (SPA — no reload)
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.slice(1)
-      if (hash === 'admin') setView('admin-login')
+      if (hash === 'admin') {
+        setView('admin-login')
+        // Clear the hash so back button doesn't re-trigger
+        window.history.replaceState(null, '', window.location.pathname + window.location.search)
+      }
       // PWA shortcut
       const params = new URLSearchParams(window.location.search)
       const v = params.get('view')
@@ -74,11 +81,12 @@ export default function Home() {
 
   // Redirect to admin dashboard if authenticated and on admin-login
   // Redirect to admin login if not authenticated and trying to view admin dashboard
+  // Subscribes to isAuthenticated + sessionExpired reactively so the redirect
+  // fires immediately when login succeeds (no full page reload needed).
   useEffect(() => {
-    const { isAuthenticated, sessionExpired } = useAdmin.getState()
     if (view === 'admin-login' && isAuthenticated && !sessionExpired) setView('admin')
     if (view === 'admin' && (!isAuthenticated || sessionExpired)) setView('admin-login')
-  }, [view, setView])
+  }, [view, setView, isAuthenticated, sessionExpired])
 
   // Loading screen
   if (loading) {

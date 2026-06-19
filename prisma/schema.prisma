@@ -71,6 +71,9 @@ model Order {
   deliveryCharge Float
   total         Float
   status        String      @default("PENDING") // PENDING, ACCEPTED, REJECTED, DELIVERED
+  // Coupon fields (nullable — most orders won't have a coupon)
+  couponCode    String?
+  couponDiscount Float?     @default(0)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -97,5 +100,44 @@ model Setting {
   value     String   // JSON encoded value
   updatedAt DateTime @updatedAt
 
+  @@schema("mehta_market")
+}
+
+model Coupon {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  description     String?
+  // Discount type: "FIXED" (₹ off) or "PERCENTAGE" (% off)
+  discountType    String   @default("FIXED")
+  // For FIXED: the amount in ₹ to subtract. For PERCENTAGE: the percentage (0-100).
+  discountValue   Float
+  // Minimum order subtotal required for the coupon to apply
+  minOrderValue   Float    @default(0)
+  // Maximum number of times this coupon can be used (0 = unlimited)
+  maxUsage        Int      @default(0)
+  // Current usage count
+  usageCount      Int      @default(0)
+  // Expiry date (null = never expires)
+  expiryDate      DateTime?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@schema("mehta_market")
+}
+
+model PushSubscription {
+  id            String   @id @default(cuid())
+  // The admin user who owns this subscription
+  adminId       String
+  // Web Push subscription endpoint URL
+  endpoint      String
+  // Subscription expiration time (nullable)
+  expirationTime DateTime?
+  // JSON-encoded keys object (p256dh, auth)
+  keys          String
+  createdAt     DateTime @default(now())
+
+  @@unique([adminId, endpoint])
   @@schema("mehta_market")
 }

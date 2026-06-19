@@ -325,6 +325,12 @@ export function AdminOrders() {
 
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>₹{viewing.subtotal.toFixed(0)}</span></div>
+                {viewing.couponCode && viewing.couponDiscount && viewing.couponDiscount > 0 && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span>Coupon ({viewing.couponCode})</span>
+                    <span>-₹{viewing.couponDiscount.toFixed(0)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between"><span className="text-muted-foreground">Delivery Charge</span><span>{viewing.deliveryCharge === 0 ? 'FREE' : `₹${viewing.deliveryCharge.toFixed(0)}`}</span></div>
                 <Separator className="my-2" />
                 <div className="flex justify-between font-extrabold text-base"><span>Total</span><span className="text-brand-green">₹{viewing.total.toFixed(0)}</span></div>

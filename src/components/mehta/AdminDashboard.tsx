@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   LayoutDashboard, Package, ShoppingCart, Settings, LogOut, Store, Bell, Image as ImageIcon,
-  TrendingUp, IndianRupee, Clock, CheckCircle2, XCircle
+  TrendingUp, IndianRupee, Clock, CheckCircle2, XCircle, Ticket
 } from 'lucide-react'
 import { useAdmin } from '@/lib/stores/admin'
 import { useNav } from '@/lib/stores/nav'
@@ -14,12 +14,14 @@ import { AdminOverview } from './admin/AdminOverview'
 import { AdminProducts } from './admin/AdminProducts'
 import { AdminOrders } from './admin/AdminOrders'
 import { AdminCategories } from './admin/AdminCategories'
+import { AdminCoupons } from './admin/AdminCoupons'
 import { AdminPopup } from './admin/AdminPopup'
 import { AdminAnnouncements } from './admin/AdminAnnouncements'
 import { NewOrderNotification } from './admin/NewOrderNotification'
 import { SessionExpiredModal } from './admin/SessionExpiredModal'
 import { useAdminSSE, type NewOrderEvent } from '@/lib/use-admin-sse'
 import { useInactivityLogout } from '@/lib/use-inactivity-logout'
+import { usePushNotifications } from '@/lib/use-push-notifications'
 import { primeAudioOnUserInteraction } from '@/lib/sound'
 import { toast } from 'sonner'
 
@@ -30,6 +32,11 @@ export function AdminDashboard() {
   const [mobileNav, setMobileNav] = useState(false)
   const [notification, setNotification] = useState<NewOrderEvent | null>(null)
   const ordersTabRef = useRef<() => void>(() => {})
+
+  // Register service worker + subscribe to push notifications (PWA).
+  // Works even when the tab is closed (uses Web Push API + VAPID).
+  // Only enabled while authenticated AND not session-expired.
+  const { showLocalNotification } = usePushNotifications(!sessionExpired)
 
   // Connect to SSE for real-time new-order notifications.
   // Uses Postgres LISTEN/NOTIFY — works on both sandbox AND Vercel.
@@ -43,6 +50,18 @@ export function AdminDashboard() {
         description: `${event.customerName} • ₹${event.total.toFixed(0)}`,
         duration: 8000,
       })
+
+      // If the page is hidden (minimized, background, screen locked), show a
+      // local notification via the service worker. This covers the case where
+      // the SSE connection is alive but the user isn't looking at the tab.
+      // For the "tab fully closed" case, the Web Push API handles it separately.
+      if (typeof document !== 'undefined' && document.hidden) {
+        showLocalNotification({
+          title: '🛒 New Order Received!',
+          body: `Order ${event.orderNumber}\n${event.customerName} • ₹${event.total.toFixed(0)}`,
+          tag: `order-${event.orderNumber}`,
+        })
+      }
     },
   })
 
@@ -85,6 +104,7 @@ export function AdminDashboard() {
     { value: 'orders', label: 'Orders', icon: ShoppingCart },
     { value: 'products', label: 'Products', icon: Package },
     { value: 'categories', label: 'Categories', icon: Store },
+    { value: 'coupons', label: 'Coupons', icon: Ticket },
     { value: 'popup', label: 'Offer Popup', icon: ImageIcon },
     { value: 'announcements', label: 'Announcements', icon: Bell },
   ]
@@ -180,6 +200,7 @@ export function AdminDashboard() {
             {tab === 'orders' && <AdminOrders />}
             {tab === 'products' && <AdminProducts />}
             {tab === 'categories' && <AdminCategories />}
+            {tab === 'coupons' && <AdminCoupons />}
             {tab === 'popup' && <AdminPopup />}
             {tab === 'announcements' && <AdminAnnouncements />}
           </main>

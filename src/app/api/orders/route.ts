@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { notifyNewOrder } from '@/lib/notifications/whatsapp'
 import { ensureSeeded } from '@/lib/auto-seed'
 import { notifyNewOrder as pgNotifyNewOrder } from '@/lib/pg-helper'
+import { sendOrderPushNotification } from '@/lib/push'
 
 export async function GET(req: NextRequest) {
   await ensureSeeded()
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
   await ensureSeeded()
   try {
     const body = await req.json()
-    const { customerName, mobile, address, landmark, notes, items, subtotal, deliveryCharge, total } = body
+    const { customerName, mobile, address, landmark, notes, items, subtotal, deliveryCharge, total, couponCode } = body
 
     if (!customerName || !mobile || !address || !items?.length) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -36,9 +37,40 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
+    // --- Coupon validation (if couponCode provided) ---
+    let validatedCouponCode: string | null = null
+    let couponDiscount = 0
+    if (couponCode) {
+      const upperCode = couponCode.toUpperCase().trim()
+      const coupon = await db.coupon.findFirst({ where: { code: upperCode } })
+      if (!coupon || !coupon.isActive) {
+        return NextResponse.json({ error: 'Invalid or inactive coupon code' }, { status: 400 })
+      }
+      if (coupon.expiryDate && new Date() > coupon.expiryDate) {
+        return NextResponse.json({ error: 'This coupon has expired' }, { status: 400 })
+      }
+      if (coupon.maxUsage > 0 && coupon.usageCount >= coupon.maxUsage) {
+        return NextResponse.json({ error: 'This coupon has reached its usage limit' }, { status: 400 })
+      }
+      const subtotalNum = parseFloat(subtotal)
+      if (subtotalNum < coupon.minOrderValue) {
+        return NextResponse.json({
+          error: `Minimum order value of ₹${coupon.minOrderValue.toFixed(0)} required for this coupon`,
+        }, { status: 400 })
+      }
+      // Calculate discount
+      if (coupon.discountType === 'FIXED') {
+        couponDiscount = coupon.discountValue
+      } else {
+        couponDiscount = (subtotalNum * coupon.discountValue) / 100
+      }
+      if (couponDiscount > subtotalNum) couponDiscount = subtotalNum
+      validatedCouponCode = upperCode
+    }
+
     const orderNumber = 'MSM' + Date.now().toString().slice(-8) + Math.floor(Math.random() * 99)
 
-    console.log('[orders] Saving order to database:', orderNumber)
+    console.log('[orders] Saving order to database:', orderNumber, '| coupon:', validatedCouponCode || 'none')
 
     const order = await db.order.create({
       data: {
@@ -52,6 +84,8 @@ export async function POST(req: NextRequest) {
         deliveryCharge: parseFloat(deliveryCharge),
         total: parseFloat(total),
         status: 'PENDING',
+        couponCode: validatedCouponCode,
+        couponDiscount,
         items: {
           create: items.map((item: any) => ({
             productId: item.productId,
@@ -73,6 +107,18 @@ export async function POST(req: NextRequest) {
         where: { id: item.productId },
         data: { soldCount: { increment: item.quantity } },
       })
+    }
+
+    // Increment coupon usage count if a coupon was used
+    if (validatedCouponCode) {
+      try {
+        await db.coupon.updateMany({
+          where: { code: validatedCouponCode },
+          data: { usageCount: { increment: 1 } },
+        })
+      } catch (e: any) {
+        console.error('[orders] Failed to increment coupon usage:', e.message)
+      }
     }
 
     // --- REAL-TIME NOTIFICATION via Postgres LISTEN/NOTIFY ---
@@ -124,6 +170,20 @@ export async function POST(req: NextRequest) {
       ).catch(() => {})
     } catch {
       // swallow
+    }
+
+    // --- PWA Push notification (non-blocking, fire-and-forget) ---
+    // Sends a native push notification to all subscribed admin devices.
+    // Works even when the browser tab is closed (uses Web Push API + VAPID).
+    try {
+      sendOrderPushNotification({
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        total: order.total,
+        itemCount: order.items.length,
+      }).catch(() => {})
+    } catch {
+      // swallow — push is best-effort
     }
 
     return NextResponse.json({ order })

@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { useCart } from '@/lib/stores/cart'
 import type { Product } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 export function ProductCard({ product }: { product: Product }) {
   const [qty, setQty] = useState(1)
@@ -34,6 +35,11 @@ export function ProductCard({ product }: { product: Product }) {
       }
       setAdding(false)
       setAdded(true)
+      // Show toast notification (cart does NOT auto-open)
+      toast.success('Item added to cart', {
+        description: `${qty} × ${product.name}`,
+        duration: 2000,
+      })
       setTimeout(() => setAdded(false), 1500)
     }, 250)
   }

@@ -38,10 +38,11 @@ export const useCart = create<CartState>()(
               items: state.items.map((i) =>
                 i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
               ),
-              isOpen: true,
+              // Do NOT auto-open cart — customer continues browsing.
+              // Toast notification is shown by the ProductCard component.
             }
           }
-          return { items: [...state.items, { ...item, quantity: 1 }], isOpen: true }
+          return { items: [...state.items, { ...item, quantity: 1 }] }
         }),
       removeItem: (id) => set((state) => ({ items: state.items.filter((i) => i.id !== id) })),
       updateQuantity: (id, quantity) =>

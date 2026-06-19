@@ -75,16 +75,19 @@ const PRODUCTS = [
 async function main() {
   console.log('Seeding Neon database...')
 
-  // Create admin (with hashed password)
+  // Create admin (with hashed password) — enforce 2-admin limit
+  const adminCount = await db.admin.count()
   const existingAdmin = await db.admin.findFirst({ where: { username: 'admin' } })
-  if (!existingAdmin) {
+  if (!existingAdmin && adminCount < 2) {
     const hashed = await hashPassword('mehta123')
     await db.admin.create({
       data: { username: 'admin', passwordHash: hashed, name: 'Mehta Admin' },
     })
     console.log('Admin user created (username: admin)')
-  } else {
+  } else if (existingAdmin) {
     console.log('Admin user already exists, skipping')
+  } else {
+    console.log(`Admin limit (2) reached, skipping admin creation`)
   }
 
   // Create categories

@@ -35,6 +35,8 @@ export interface Order {
   deliveryCharge: number
   total: number
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'DELIVERED'
+  couponCode?: string | null
+  couponDiscount?: number | null
   createdAt: string
   updatedAt: string
 }

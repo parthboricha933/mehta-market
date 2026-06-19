@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { ArrowLeft, MapPin, Truck, ShieldCheck, Loader2, AlertCircle, Info } from 'lucide-react'
+import { ArrowLeft, MapPin, Truck, ShieldCheck, Loader2, AlertCircle, Info, Ticket, Check, X } from 'lucide-react'
 import { useCart, cartSubtotal } from '@/lib/stores/cart'
 import { useNav } from '@/lib/stores/nav'
 import { toast } from 'sonner'
@@ -27,11 +27,59 @@ export function CheckoutPage({ shopInfo }: { shopInfo: ShopInfo | null }) {
     notes: '',
   })
 
+  // Coupon state
+  const [couponCode, setCouponCode] = useState('')
+  const [couponDiscount, setCouponDiscount] = useState(0)
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountType: string; discountValue: number } | null>(null)
+  const [couponError, setCouponError] = useState<string | null>(null)
+  const [couponLoading, setCouponLoading] = useState(false)
+
   const subtotal = cartSubtotal(items)
   const freeDeliveryThreshold = shopInfo?.minOrderForFreeDelivery || 500
   const deliveryCharge = shopInfo?.deliveryCharge || 30
   const charge = subtotal >= freeDeliveryThreshold ? 0 : deliveryCharge
-  const total = subtotal + charge
+  const total = Math.max(0, subtotal - couponDiscount + charge)
+
+  const handleApplyCoupon = async () => {
+    setCouponError(null)
+    if (!couponCode.trim()) {
+      setCouponError('Please enter a coupon code')
+      return
+    }
+    setCouponLoading(true)
+    try {
+      const res = await fetch('/api/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: couponCode, subtotal }),
+      })
+      const data = await res.json()
+      if (data.valid) {
+        setCouponDiscount(data.discount)
+        setAppliedCoupon(data.coupon)
+        toast.success(`Coupon applied: ${data.coupon.code}`, {
+          description: `You saved ₹${data.discount.toFixed(0)}!`,
+        })
+      } else {
+        setCouponError(data.error || 'Invalid coupon')
+        setCouponDiscount(0)
+        setAppliedCoupon(null)
+      }
+    } catch {
+      setCouponError('Failed to validate coupon')
+      setCouponDiscount(0)
+      setAppliedCoupon(null)
+    } finally {
+      setCouponLoading(false)
+    }
+  }
+
+  const handleRemoveCoupon = () => {
+    setCouponCode('')
+    setCouponDiscount(0)
+    setAppliedCoupon(null)
+    setCouponError(null)
+  }
 
   const handlePlaceOrder = async () => {
     setError(null)
@@ -64,6 +112,7 @@ export function CheckoutPage({ shopInfo }: { shopInfo: ShopInfo | null }) {
           subtotal,
           deliveryCharge: charge,
           total,
+          couponCode: appliedCoupon?.code || undefined,
         }),
       })
       const data = await res.json()
@@ -219,11 +268,71 @@ export function CheckoutPage({ shopInfo }: { shopInfo: ShopInfo | null }) {
             </div>
 
             <Separator />
+
+            {/* Coupon input */}
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold flex items-center gap-1">
+                <Ticket className="h-3.5 w-3.5" /> Have a coupon code?
+              </Label>
+              {appliedCoupon ? (
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
+                  <Check className="h-4 w-4 text-emerald-600" />
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-emerald-800">{appliedCoupon.code}</p>
+                    <p className="text-xs text-emerald-600">
+                      {appliedCoupon.discountType === 'FIXED'
+                        ? `₹${appliedCoupon.discountValue} off`
+                        : `${appliedCoupon.discountValue}% off`}
+                      {' • Saved ₹'}{couponDiscount.toFixed(0)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleRemoveCoupon}
+                    className="text-emerald-600 hover:text-red-600 transition"
+                    aria-label="Remove coupon"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    value={couponCode}
+                    onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setCouponError(null) }}
+                    placeholder="Enter code"
+                    className="flex-1 uppercase"
+                    maxLength={20}
+                  />
+                  <Button
+                    onClick={handleApplyCoupon}
+                    disabled={couponLoading || !couponCode.trim()}
+                    size="sm"
+                    variant="outline"
+                    className="border-brand-green text-brand-green hover:bg-brand-green/10"
+                  >
+                    {couponLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply'}
+                  </Button>
+                </div>
+              )}
+              {couponError && (
+                <p className="text-xs text-red-600 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" /> {couponError}
+                </p>
+              )}
+            </div>
+
+            <Separator />
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Subtotal</span>
                 <span className="font-semibold">₹{subtotal.toFixed(0)}</span>
               </div>
+              {couponDiscount > 0 && (
+                <div className="flex justify-between text-emerald-600">
+                  <span>Coupon Discount</span>
+                  <span className="font-semibold">-₹{couponDiscount.toFixed(0)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Delivery Charge</span>
                 {charge === 0 ? (
