@@ -3,8 +3,8 @@
 import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 
-export const SESSION_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes of inactivity
-export const SESSION_ABSOLUTE_MAX_MS = 7 * 24 * 60 * 60 * 1000 // 7 days max session lifetime
+export const SESSION_TIMEOUT_MS = 365 * 24 * 60 * 60 * 1000 // 1 year — session persists across browser restarts
+export const SESSION_ABSOLUTE_MAX_MS = 365 * 24 * 60 * 60 * 1000 // 1 year max session lifetime
 
 // Maximum number of admin accounts allowed in the system.
 // No limit on admin accounts — any number can exist.
@@ -108,7 +108,7 @@ export function setSessionCookie(res: any, token: string) {
   res.cookies.set('mehta_admin_token', token, {
     httpOnly: true,
     sameSite: 'lax',
-    maxAge: SESSION_TIMEOUT_MS / 1000, // cookie expires when inactivity window passes
+    maxAge: 365 * 24 * 60 * 60, // 1 year — cookie persists across browser restarts
     path: '/',
   })
 }

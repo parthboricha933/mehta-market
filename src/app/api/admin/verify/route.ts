@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifySession, refreshSessionToken, setSessionCookie, clearSessionCookie } from '@/lib/auth'
-import { releaseSession, heartbeatSession } from '@/lib/session-manager'
+import { releaseSession, heartbeatSession, acquireSession, getActiveSession } from '@/lib/session-manager'
+import { db } from '@/lib/db'
 
 // POST: Verify the current admin session.
-// - On valid session: refresh lastActivity (sliding expiration) + send heartbeat
-// - On expired session: return 401 with `expired: true`
+// - If cookie is valid: refresh session + re-acquire session lock if needed + send heartbeat
+// - If cookie is invalid/expired: return 401
 export async function POST(req: NextRequest) {
   const token = req.cookies.get('mehta_admin_token')?.value
   if (!token) {
@@ -23,8 +24,20 @@ export async function POST(req: NextRequest) {
     return res
   }
 
-  // Send heartbeat to keep the single-session lock alive
-  await heartbeatSession(token)
+  // Check if the session manager session still exists.
+  // If it was auto-cleaned (e.g. browser was closed for >30 min), re-acquire it.
+  const activeSession = await getActiveSession()
+  if (!activeSession) {
+    // Session was cleaned up — re-acquire it automatically (cookie is still valid)
+    console.log('[verify] Session lock missing — re-acquiring for admin:', result.admin?.username)
+    const admin = await db.admin.findUnique({ where: { id: result.admin!.id } })
+    if (admin) {
+      await acquireSession(admin.id, admin.username, token)
+    }
+  } else {
+    // Session exists — send heartbeat
+    await heartbeatSession(token)
+  }
 
   // Refresh session (sliding expiration)
   const newToken = refreshSessionToken(result.payload!)
@@ -40,7 +53,6 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const token = req.cookies.get('mehta_admin_token')?.value
   if (token) {
-    // Release the active session so another admin can log in
     await releaseSession(token)
   }
   const res = NextResponse.json({ success: true })

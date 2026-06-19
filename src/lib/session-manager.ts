@@ -11,7 +11,8 @@
 import { db } from '@/lib/db'
 
 const SESSION_KEY = 'active_admin_session'
-const SESSION_TIMEOUT_MS = 2 * 60 * 1000 // 2 minutes without heartbeat = session expired
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes without heartbeat = session expired
+// (was 2 min — too aggressive, caused auto-logout when tab was closed briefly)
 
 export interface ActiveSession {
   adminId: string
