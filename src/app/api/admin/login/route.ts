@@ -5,8 +5,11 @@ import {
   setSessionCookie, type SessionPayload,
 } from '@/lib/auth'
 import { ensureSeeded } from '@/lib/auto-seed'
+import { acquireSession } from '@/lib/session-manager'
 
 // Secure admin login: bcrypt-hashed password verification + session-based cookie.
+// Only ONE admin can be logged in at a time — if another admin is active,
+// login is blocked with "Admin account is already active on another device."
 export async function POST(req: NextRequest) {
   await ensureSeeded()
   try {
@@ -45,6 +48,14 @@ export async function POST(req: NextRequest) {
       version: 1,
     }
     const token = createSessionToken(payload)
+
+    // --- SINGLE ACTIVE SESSION ENFORCEMENT ---
+    // Only one admin can be logged in at a time. If another admin is active
+    // (with a valid heartbeat), block this login.
+    const sessionResult = await acquireSession(admin.id, admin.username, token)
+    if (!sessionResult.success) {
+      return NextResponse.json({ error: sessionResult.error }, { status: 403 })
+    }
 
     const res = NextResponse.json({
       success: true,

@@ -1,29 +1,59 @@
-// Web Push notification helper.
-// Sends native push notifications to all subscribed admin devices.
-// Works even when the browser tab is closed (uses the Web Push API + VAPID).
+// Push notification helper with delivery logging.
+// Uses Web Push (VAPID) as primary mechanism — works even when tab is closed.
+// If Firebase credentials are configured, also sends via FCM for maximum reliability.
+
 import webpush from 'web-push'
 import { db } from '@/lib/db'
 
-// VAPID keys are generated once and must stay the same across deployments.
-// They're loaded from environment variables (set in Vercel project settings).
-// If not set, push notifications are silently skipped (SSE notifications still work).
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || ''
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || ''
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@mehtasupermarket.com'
 
-let configured = false
-function configure() {
-  if (configured) return
+// Firebase FCM credentials (optional — if set, FCM is used as an additional channel)
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || ''
+const FIREBASE_CLIENT_EMAIL = process.env.FIREBASE_CLIENT_EMAIL || ''
+const FIREBASE_PRIVATE_KEY = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n') || ''
+
+let vapidConfigured = false
+function configureVapid() {
+  if (vapidConfigured) return
   if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
-    configured = true
-    console.log('[push] VAPID configured — web push notifications enabled')
-  } else {
-    console.warn('[push] VAPID keys not set — web push notifications disabled (SSE still works)')
+    vapidConfigured = true
+    console.log('[push] VAPID configured')
+  }
+}
+
+let fcmInitialized = false
+let firebaseAdmin: any = null
+async function initFCM() {
+  if (fcmInitialized) return firebaseAdmin
+  if (!FIREBASE_PROJECT_ID || !FIREBASE_CLIENT_EMAIL || !FIREBASE_PRIVATE_KEY) return null
+
+  try {
+    const admin = await import('firebase-admin/app')
+    const messaging = await import('firebase-admin/messaging')
+
+    if (!firebaseAdmin) {
+      const cert = admin.cert({
+        projectId: FIREBASE_PROJECT_ID,
+        clientEmail: FIREBASE_CLIENT_EMAIL,
+        privateKey: FIREBASE_PRIVATE_KEY,
+      })
+      admin.initializeApp({ credential: cert })
+      firebaseAdmin = messaging.getMessaging()
+    }
+    fcmInitialized = true
+    console.log('[push] FCM initialized')
+    return firebaseAdmin
+  } catch (e: any) {
+    console.error('[push] FCM init failed:', e.message?.slice(0, 100))
+    return null
   }
 }
 
 export interface PushOrderPayload {
+  orderId: string
   orderNumber: string
   customerName: string
   total: number
@@ -31,18 +61,31 @@ export interface PushOrderPayload {
 }
 
 /**
- * Send a push notification to ALL subscribed admin devices.
- * Called from /api/orders POST after an order is saved.
- * Failures are silently ignored (non-blocking).
+ * Send push notification to ALL subscribed admin devices.
+ * Uses both Web Push (VAPID) and FCM (if configured) for maximum reliability.
+ * Logs delivery status for debugging.
  */
 export async function sendOrderPushNotification(payload: PushOrderPayload): Promise<void> {
-  configure()
-  if (!configured) return // VAPID not configured — skip silently
+  console.log('[push] Sending notification for order:', payload.orderNumber)
 
+  // --- Web Push (VAPID) ---
+  configureVapid()
+  if (vapidConfigured) {
+    await sendViaWebPush(payload)
+  }
+
+  // --- FCM (if configured) ---
+  const fcm = await initFCM()
+  if (fcm) {
+    await sendViaFCM(fcm, payload)
+  }
+}
+
+async function sendViaWebPush(payload: PushOrderPayload): Promise<void> {
   try {
     const subscriptions = await db.pushSubscription.findMany()
     if (subscriptions.length === 0) {
-      console.log('[push] No subscriptions — skipping push notification')
+      console.log('[push] No VAPID subscriptions — skipping web push')
       return
     }
 
@@ -50,46 +93,73 @@ export async function sendOrderPushNotification(payload: PushOrderPayload): Prom
       title: '🛒 New Order Received!',
       body: `Order ${payload.orderNumber}\n${payload.customerName} • ₹${payload.total.toFixed(0)}\n${payload.itemCount} ${payload.itemCount === 1 ? 'item' : 'items'}`,
       tag: `order-${payload.orderNumber}`,
-      data: { url: '/?view=admin' },
+      data: { url: `/?view=admin&tab=orders&order=${payload.orderId}`, orderId: payload.orderId },
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
     })
 
-    console.log(`[push] Sending push to ${subscriptions.length} subscription(s)`)
+    console.log(`[push] VAPID: sending to ${subscriptions.length} device(s)`)
 
-    const results = await Promise.allSettled(
-      subscriptions.map(async (sub) => {
+    let succeeded = 0
+    let failed = 0
+
+    for (const sub of subscriptions) {
+      try {
         const subscription = {
           endpoint: sub.endpoint,
           expirationTime: sub.expirationTime ? sub.expirationTime.getTime() : null,
           keys: JSON.parse(sub.keys),
         }
-        try {
-          await webpush.sendNotification(subscription, pushPayload)
-          console.log('[push] Sent to:', sub.endpoint.slice(-30))
-        } catch (err: any) {
-          // 410 = subscription expired/unsubscribed — delete it from DB
-          if (err.statusCode === 410 || err.statusCode === 404) {
-            console.log('[push] Subscription expired, deleting:', sub.endpoint.slice(-30))
-            await db.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {})
-          } else {
-            console.error('[push] Failed to send:', err.statusCode, err.message?.slice(0, 100))
-          }
+        await webpush.sendNotification(subscription, pushPayload)
+        succeeded++
+        console.log('[push] VAPID ✅ delivered to:', sub.endpoint.slice(-30))
+      } catch (err: any) {
+        failed++
+        if (err.statusCode === 410 || err.statusCode === 404) {
+          // Subscription expired — delete it
+          console.log('[push] VAPID ❌ expired, deleting:', sub.endpoint.slice(-30))
+          await db.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {})
+        } else {
+          console.error('[push] VAPID ❌ failed:', err.statusCode, err.message?.slice(0, 80))
         }
-      })
-    )
+      }
+    }
 
-    const succeeded = results.filter((r) => r.status === 'fulfilled').length
-    console.log(`[push] Sent ${succeeded}/${subscriptions.length} notifications`)
+    console.log(`[push] VAPID result: ${succeeded} delivered, ${failed} failed`)
   } catch (e: any) {
-    console.error('[push] sendOrderPushNotification failed:', e.message)
+    console.error('[push] VAPID error:', e.message)
   }
 }
 
-/**
- * Get the VAPID public key for the frontend (to subscribe the browser).
- * Returns empty string if not configured.
- */
+async function sendViaFCM(fcm: any, payload: PushOrderPayload): Promise<void> {
+  try {
+    // FCM sends to all devices subscribed to the "admin" topic
+    const message = {
+      notification: {
+        title: '🛒 New Order Received!',
+        body: `Order ${payload.orderNumber} • ${payload.customerName} • ₹${payload.total.toFixed(0)}`,
+      },
+      data: {
+        url: `/?view=admin&tab=orders&order=${payload.orderId}`,
+        orderId: payload.orderId,
+        orderNumber: payload.orderNumber,
+        customerName: payload.customerName,
+        total: payload.total.toString(),
+      },
+      topic: 'admin',
+    }
+
+    const response = await fcm.send(message)
+    console.log('[push] FCM ✅ sent:', response)
+  } catch (e: any) {
+    console.error('[push] FCM ❌ failed:', e.message?.slice(0, 100))
+  }
+}
+
 export function getVapidPublicKey(): string {
   return VAPID_PUBLIC_KEY
+}
+
+export function isFCMConfigured(): boolean {
+  return !!(FIREBASE_PROJECT_ID && FIREBASE_CLIENT_EMAIL && FIREBASE_PRIVATE_KEY)
 }

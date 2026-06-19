@@ -7,8 +7,9 @@ export const SESSION_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes of inactivity
 export const SESSION_ABSOLUTE_MAX_MS = 7 * 24 * 60 * 60 * 1000 // 7 days max session lifetime
 
 // Maximum number of admin accounts allowed in the system.
-// This is a hard limit — no more than 2 admins can exist at any time.
-export const MAX_ADMIN_ACCOUNTS = 2
+// No limit on admin accounts — any number can exist.
+// However, only ONE admin can be logged in at a time (enforced by session-manager.ts).
+export const MAX_ADMIN_ACCOUNTS = 999999
 
 export interface SessionPayload {
   adminId: string
