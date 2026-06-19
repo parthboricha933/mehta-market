@@ -115,17 +115,18 @@ export function usePushNotifications(enabled: boolean) {
   // Return a function to show a local notification via SW
   // (used when SSE event arrives and the page is hidden)
   return {
-    showLocalNotification: async (payload: { title: string; body: string; tag?: string }) => {
+    showLocalNotification: async (payload: { title: string; body: string; tag?: string; orderId?: string }) => {
       try {
         const reg = swRef.current || (await navigator.serviceWorker.getRegistration())
         if (reg && Notification.permission === 'granted') {
+          const orderId = payload.orderId
           reg.showNotification(payload.title, {
             body: payload.body,
             icon: '/icons/icon-192.png',
             badge: '/icons/icon-192.png',
-            tag: payload.tag || 'new-order',
+            tag: payload.tag || `order-${orderId || 'new'}`,
             renotify: true,
-            data: { url: '/?view=admin' },
+            data: { url: `/?view=admin&tab=orders&order=${orderId || ''}`, orderId },
             vibrate: [200, 100, 200],
             actions: [
               { action: 'view', title: 'View Order' },

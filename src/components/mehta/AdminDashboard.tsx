@@ -69,6 +69,7 @@ export function AdminDashboard() {
           title: '🔔 New Order Received',
           body: `Order: ${event.orderNumber}\nCustomer: ${event.customerName}\nAmount: ₹${event.total.toFixed(0)}`,
           tag: `order-${event.orderNumber}`,
+          orderId: event.orderId,
         })
       }
     },

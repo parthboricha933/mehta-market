@@ -51,18 +51,32 @@ export default function Home() {
       })
       .finally(() => setLoading(false))
 
-    // Check admin auth on mount
+    // Check admin auth on mount — verify cookie with server
+    // The admin store now persists to localStorage, so if the user was
+    // previously logged in, the store will have isAuthenticated=true.
+    // We verify with the server to make sure the cookie is still valid.
     fetch('/api/admin/verify', { method: 'POST' })
       .then((r) => r.ok ? r.json() : null)
       .then((d) => {
         if (d?.authenticated) {
           setAuth(d.admin)
+          // If the store says we're authenticated but the view isn't admin,
+          // and we're on admin-login, redirect to admin dashboard
+          if (useNav.getState().view === 'admin-login') {
+            useNav.getState().setView('admin')
+          }
         } else if (d?.expired) {
-          // Server says session expired — surface that to the admin store
           useAdmin.getState().setSessionExpired(d.reason || 'inactivity')
+        } else {
+          // Cookie is gone or invalid — clear the persisted auth state
+          useAdmin.getState().logout()
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        // Network error — don't clear auth (might be temporary)
+        // The persisted localStorage auth will keep the admin logged in
+        // until the network recovers
+      })
 
     // Check URL for admin view (SPA — no reload)
     if (typeof window !== 'undefined') {
