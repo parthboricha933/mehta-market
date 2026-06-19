@@ -60,16 +60,11 @@ export async function acquireSession(
   const existing = await getActiveSession()
 
   if (existing) {
-    // Same admin re-logging in? Allow it (take over the session)
-    if (existing.adminId === adminId) {
-      console.log('[session] Same admin re-login — updating session')
-    } else {
-      // Different admin is active — block
-      console.log('[session] Blocked login — admin', existing.adminUsername, 'is already active')
-      return {
-        success: false,
-        error: 'Admin account is already active on another device. Please wait for the current session to end.',
-      }
+    // An admin session is already active — block ALL logins (even same admin from another device)
+    console.log('[session] Blocked login — admin', existing.adminUsername, 'is already active')
+    return {
+      success: false,
+      error: 'Admin account is already active on another device. Please wait for the current session to end.',
     }
   }
 
