@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Plus, Minus, ShoppingCart, Check, Loader2 } from 'lucide-react'
+import { Plus, Minus, ShoppingCart, Check, Loader2, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useCart } from '@/lib/stores/cart'
 import type { Product } from '@/lib/types'
@@ -10,38 +10,61 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
 export function ProductCard({ product }: { product: Product }) {
-  const [qty, setQty] = useState(1)
   const [adding, setAdding] = useState(false)
   const [added, setAdded] = useState(false)
   const addItem = useCart((s) => s.addItem)
+  const updateQuantity = useCart((s) => s.updateQuantity)
+  const cartItem = useCart((s) => s.items.find((i) => i.id === product.id))
   const image = product.images?.[0] || 'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=400&q=70'
 
   const discount = product.mrp && product.mrp > product.price
     ? Math.round(((product.mrp - product.price) / product.mrp) * 100)
     : 0
 
+  // Whether this product is in the cart
+  const inCartQty = cartItem?.quantity || 0
+  const isInCart = inCartQty > 0
+
   const handleAdd = () => {
     setAdding(true)
     setTimeout(() => {
-      for (let i = 0; i < qty; i++) {
-        addItem({
-          id: product.id,
-          name: product.name,
-          price: product.price,
-          mrp: product.mrp,
-          image,
-          unit: product.unit || '',
-        })
-      }
+      addItem({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        mrp: product.mrp,
+        image,
+        unit: product.unit || '',
+      })
       setAdding(false)
       setAdded(true)
       // Show toast notification (cart does NOT auto-open)
-      toast.success('Item added to cart', {
-        description: `${qty} × ${product.name}`,
+      toast.success('✓ Item added to cart', {
+        description: product.name,
         duration: 2000,
       })
       setTimeout(() => setAdded(false), 1500)
     }, 250)
+  }
+
+  const handleIncrement = () => {
+    addItem({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      mrp: product.mrp,
+      image,
+      unit: product.unit || '',
+    })
+  }
+
+  const handleDecrement = () => {
+    if (inCartQty > 1) {
+      updateQuantity(product.id, inCartQty - 1)
+    } else {
+      // Remove from cart entirely
+      updateQuantity(product.id, 0)
+    }
   }
 
   return (
@@ -49,6 +72,11 @@ export function ProductCard({ product }: { product: Product }) {
       {discount > 0 && (
         <div className="absolute top-2 left-2 z-10 bg-brand-orange text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-md">
           {discount}% OFF
+        </div>
+      )}
+      {isInCart && (
+        <div className="absolute top-2 right-2 z-10 bg-brand-green text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-md flex items-center gap-1">
+          <Check className="h-2.5 w-2.5" /> In Cart
         </div>
       )}
       {!product.isActive && (
@@ -92,30 +120,14 @@ export function ProductCard({ product }: { product: Product }) {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center border border-border rounded-md overflow-hidden">
-            <button
-              onClick={() => setQty((q) => Math.max(1, q - 1))}
-              className="h-8 w-8 grid place-items-center hover:bg-muted transition"
-              aria-label="Decrease quantity"
-            >
-              <Minus className="h-3 w-3" />
-            </button>
-            <span className="w-7 text-center text-sm font-semibold">{qty}</span>
-            <button
-              onClick={() => setQty((q) => q + 1)}
-              className="h-8 w-8 grid place-items-center hover:bg-muted transition"
-              aria-label="Increase quantity"
-            >
-              <Plus className="h-3 w-3" />
-            </button>
-          </div>
+        {/* Add to Cart button OR quantity controls (if already in cart) */}
+        {!isInCart ? (
           <Button
             onClick={handleAdd}
             disabled={!product.isActive || adding}
             size="sm"
             className={cn(
-              "flex-1 h-8 text-xs font-bold transition-all",
+              "w-full h-9 text-xs font-bold transition-all",
               added
                 ? "bg-brand-green hover:bg-brand-green"
                 : "bg-brand-orange hover:bg-brand-orange-dark text-white"
@@ -129,11 +141,32 @@ export function ProductCard({ product }: { product: Product }) {
               </>
             ) : (
               <>
-                <ShoppingCart className="h-3.5 w-3.5 mr-1" /> Add
+                <ShoppingCart className="h-3.5 w-3.5 mr-1" /> Add to Cart
               </>
             )}
           </Button>
-        </div>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleDecrement}
+              className="h-9 w-9 grid place-items-center border border-border rounded-md hover:bg-muted transition text-foreground"
+              aria-label="Decrease quantity"
+            >
+              {inCartQty === 1 ? <Trash2 className="h-3.5 w-3.5 text-red-500" /> : <Minus className="h-3.5 w-3.5" />}
+            </button>
+            <div className="flex-1 h-9 grid place-items-center bg-brand-green/10 border border-brand-green/30 rounded-md">
+              <span className="text-sm font-extrabold text-brand-green">{inCartQty}</span>
+            </div>
+            <button
+              onClick={handleIncrement}
+              disabled={!product.isActive}
+              className="h-9 w-9 grid place-items-center border border-border rounded-md hover:bg-muted transition text-foreground disabled:opacity-50"
+              aria-label="Increase quantity"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </div>
     </Card>
   )

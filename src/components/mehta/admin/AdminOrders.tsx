@@ -56,12 +56,14 @@ function eventToOrder(event: NewOrderEvent): Order {
   }
 }
 
-export function AdminOrders() {
+export function AdminOrders({ highlightOrderId: highlightOrderIdProp }: { highlightOrderId?: string | null }) {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const [viewing, setViewing] = useState<Order | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const [highlightOrderId, setHighlightOrderId] = useState<string | null>(highlightOrderIdProp || null)
+  const highlightedRef = useRef<HTMLDivElement | null>(null)
 
   // Subscribe to real-time new-order events from the shared admin store.
   // The SSE hook in AdminDashboard publishes events here; we react by
@@ -86,6 +88,20 @@ export function AdminOrders() {
   }
 
   useEffect(() => { load() }, [filter])
+
+  // Highlight + scroll to a specific order (triggered by notification click)
+  useEffect(() => {
+    if (!highlightOrderId) return
+    // Wait a moment for the DOM to render the order card
+    const timer = setTimeout(() => {
+      if (highlightedRef.current) {
+        highlightedRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }, 300)
+    // Clear the highlight after 5 seconds
+    const clearTimer = setTimeout(() => setHighlightOrderId(null), 5000)
+    return () => { clearTimeout(timer); clearTimeout(clearTimer) }
+  }, [highlightOrderId])
 
   // Real-time handler: when a new-order event arrives via SSE (published to the
   // store by the useAdminSSE hook), prepend it to the list instantly.
@@ -205,7 +221,12 @@ export function AdminOrders() {
       ) : (
         <div className="space-y-3">
           {orders.map((o) => (
-            <Card key={o.id} className="p-4 hover:shadow-md transition">
+            <div
+              key={o.id}
+              ref={highlightOrderId === o.id ? highlightedRef : undefined}
+              className={highlightOrderId === o.id ? 'ring-4 ring-brand-orange ring-offset-2 rounded-xl animate-pulse' : ''}
+            >
+            <Card className={`p-4 hover:shadow-md transition ${highlightOrderId === o.id ? 'border-brand-orange border-2' : ''}`}>
               <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -257,6 +278,7 @@ export function AdminOrders() {
                 )}
               </div>
             </Card>
+            </div>
           ))}
         </div>
       )}

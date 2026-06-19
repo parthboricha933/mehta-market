@@ -72,10 +72,21 @@ export default function Home() {
         // Clear the hash so back button doesn't re-trigger
         window.history.replaceState(null, '', window.location.pathname + window.location.search)
       }
-      // PWA shortcut
+      // PWA shortcut / notification click: ?view=admin&tab=orders&order=ID
       const params = new URLSearchParams(window.location.search)
       const v = params.get('view')
       if (v === 'shop') setView('shop')
+      if (v === 'admin') {
+        // Read tab and order params for notification click navigation
+        const tab = params.get('tab')
+        const order = params.get('order')
+        if (tab) useAdmin.getState().setPendingAdminTab(tab)
+        if (order) useAdmin.getState().setHighlightOrderId(order)
+        // Navigate to admin-login (will redirect to admin dashboard if already authenticated)
+        setView('admin-login')
+        // Clear the query params so back button doesn't re-trigger
+        window.history.replaceState(null, '', window.location.pathname)
+      }
     }
   }, [setView, setAuth])
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
-import type { NewOrderEvent } from '@/lib/use-admin-socket'
+import type { NewOrderEvent } from '@/lib/use-admin-sse'
 
 interface AdminState {
   isAuthenticated: boolean
@@ -17,6 +17,10 @@ interface AdminState {
   // can detect new events even if the same payload is somehow emitted twice.
   lastNewOrderEvent: NewOrderEvent | null
   lastNewOrderSeq: number
+  // When a notification is clicked, this stores the order ID to highlight
+  // in the Orders tab, and the tab to switch to.
+  highlightOrderId: string | null
+  pendingAdminTab: string | null
   setAuth: (a: { id: string; username: string; name: string | null }) => void
   logout: () => void
   setSessionExpired: (reason: 'inactivity' | 'max_lifetime') => void
@@ -25,6 +29,8 @@ interface AdminState {
   resetNewOrderCount: () => void
   setNewOrderCount: (n: number) => void
   publishNewOrderEvent: (event: NewOrderEvent) => void
+  setHighlightOrderId: (id: string | null) => void
+  setPendingAdminTab: (tab: string | null) => void
 }
 
 export const useAdmin = create<AdminState>((set) => ({
@@ -35,8 +41,10 @@ export const useAdmin = create<AdminState>((set) => ({
   newOrderCount: 0,
   lastNewOrderEvent: null,
   lastNewOrderSeq: 0,
+  highlightOrderId: null,
+  pendingAdminTab: null,
   setAuth: (admin) => set({ isAuthenticated: true, admin, sessionExpired: false, sessionExpiryReason: null }),
-  logout: () => set({ isAuthenticated: false, admin: null, sessionExpired: false, sessionExpiryReason: null, newOrderCount: 0, lastNewOrderEvent: null, lastNewOrderSeq: 0 }),
+  logout: () => set({ isAuthenticated: false, admin: null, sessionExpired: false, sessionExpiryReason: null, newOrderCount: 0, lastNewOrderEvent: null, lastNewOrderSeq: 0, highlightOrderId: null, pendingAdminTab: null }),
   setSessionExpired: (reason) =>
     set({ isAuthenticated: false, admin: null, sessionExpired: true, sessionExpiryReason: reason }),
   clearSessionExpired: () => set({ sessionExpired: false, sessionExpiryReason: null }),
@@ -45,4 +53,6 @@ export const useAdmin = create<AdminState>((set) => ({
   setNewOrderCount: (n) => set({ newOrderCount: Math.max(0, n) }),
   publishNewOrderEvent: (event) =>
     set((s) => ({ lastNewOrderEvent: event, lastNewOrderSeq: s.lastNewOrderSeq + 1 })),
+  setHighlightOrderId: (id) => set({ highlightOrderId: id }),
+  setPendingAdminTab: (tab) => set({ pendingAdminTab: tab }),
 }))

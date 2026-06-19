@@ -26,12 +26,21 @@ import { primeAudioOnUserInteraction } from '@/lib/sound'
 import { toast } from 'sonner'
 
 export function AdminDashboard() {
-  const { admin, logout, newOrderCount, resetNewOrderCount, sessionExpired } = useAdmin()
+  const { admin, logout, newOrderCount, resetNewOrderCount, sessionExpired, pendingAdminTab, highlightOrderId, setPendingAdminTab } = useAdmin()
   const setView = useNav((s) => s.setView)
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useState(() => pendingAdminTab || 'overview')
   const [mobileNav, setMobileNav] = useState(false)
   const [notification, setNotification] = useState<NewOrderEvent | null>(null)
   const ordersTabRef = useRef<() => void>(() => {})
+
+  // If there's a pending admin tab (from notification click), switch to it
+  // and clear the pending state so it only fires once.
+  useEffect(() => {
+    if (pendingAdminTab) {
+      setTab(pendingAdminTab)
+      setPendingAdminTab(null)
+    }
+  }, [pendingAdminTab, setPendingAdminTab])
 
   // Register service worker + subscribe to push notifications (PWA).
   // Works even when the tab is closed (uses Web Push API + VAPID).
@@ -197,7 +206,7 @@ export function AdminDashboard() {
           {/* Main content */}
           <main className="min-w-0">
             {tab === 'overview' && <AdminOverview />}
-            {tab === 'orders' && <AdminOrders />}
+            {tab === 'orders' && <AdminOrders highlightOrderId={highlightOrderId} />}
             {tab === 'products' && <AdminProducts />}
             {tab === 'categories' && <AdminCategories />}
             {tab === 'coupons' && <AdminCoupons />}

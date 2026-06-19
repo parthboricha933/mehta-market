@@ -1,7 +1,7 @@
 // Service Worker for Mehta Super Market
 // Handles:
 // 1. Push notifications (from web push service — works even when tab is closed)
-// 2. Notification clicks (opens/focuses the admin orders page)
+// 2. Notification clicks (opens admin dashboard → Orders page → highlights new order)
 // 3. Message-based notifications (from the page when tab is alive but hidden)
 
 const CACHE_NAME = 'mehta-market-v1'
@@ -45,7 +45,8 @@ self.addEventListener('push', (event) => {
     badge: payload.badge || '/icons/icon-192.png',
     tag: payload.tag || 'new-order',
     renotify: true,
-    data: payload.data || { url: '/?view=admin' },
+    // Navigate to admin dashboard → Orders tab, with orderId for highlighting
+    data: payload.data || { url: '/?view=admin&tab=orders' },
     requireInteraction: false,
     vibrate: [200, 100, 200],
     actions: [
@@ -59,14 +60,23 @@ self.addEventListener('push', (event) => {
   )
 })
 
-// --- Notification click: open/focus the app and navigate to orders ---
+// --- Notification click: open/focus the app and navigate to admin orders page ---
+// Behavior:
+//   - If admin is logged in → open admin dashboard, Orders tab, highlight the order
+//   - If admin is NOT logged in → open admin login page (after login, redirect to Orders)
+//   - Never open the customer-facing website
 self.addEventListener('notificationclick', (event) => {
   console.log('[sw] Notification clicked:', event.action)
   event.notification.close()
 
   if (event.action === 'dismiss') return
 
-  const targetUrl = event.notification.data?.url || '/?view=admin'
+  // Build the target URL: always go to admin view with Orders tab
+  // The orderId (if present) is used to highlight the specific order
+  const orderId = event.notification.data?.orderId
+  const targetUrl = orderId
+    ? `/?view=admin&tab=orders&order=${orderId}`
+    : '/?view=admin&tab=orders'
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
@@ -89,6 +99,7 @@ self.addEventListener('message', (event) => {
 
   if (event.data?.type === 'SHOW_NOTIFICATION') {
     const payload = event.data.payload || {}
+    const orderId = payload.orderId
     const title = payload.title || '🛒 New Order Received!'
     const options = {
       body: payload.body || 'A new order has been placed',
@@ -96,7 +107,7 @@ self.addEventListener('message', (event) => {
       badge: payload.badge || '/icons/icon-192.png',
       tag: 'new-order',
       renotify: true,
-      data: { url: '/?view=admin' },
+      data: { url: '/?view=admin&tab=orders', orderId: orderId },
       requireInteraction: false,
       vibrate: [200, 100, 200],
       actions: [
