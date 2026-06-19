@@ -172,11 +172,12 @@ export async function POST(req: NextRequest) {
       // swallow
     }
 
-    // --- PWA Push notification (non-blocking, fire-and-forget) ---
-    // Sends a native push notification to all subscribed admin devices.
-    // Works even when the browser tab is closed (uses Web Push API + VAPID).
+    // --- Push notification (FCM + VAPID fallback) ---
+    // Sends a native push notification to the ACTIVE admin device ONLY.
+    // Works even when the browser tab is closed (uses FCM + Web Push).
     try {
       sendOrderPushNotification({
+        orderId: order.id,
         orderNumber: order.orderNumber,
         customerName: order.customerName,
         total: order.total,

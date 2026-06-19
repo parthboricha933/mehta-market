@@ -23,7 +23,6 @@ export default function Home() {
   const view = useNav((s) => s.view)
   const setView = useNav((s) => s.setView)
   const setAuth = useAdmin((s) => s.setAuth)
-  // Subscribe to auth state reactively so the redirect effect fires when login succeeds
   const isAuthenticated = useAdmin((s) => s.isAuthenticated)
   const sessionExpired = useAdmin((s) => s.sessionExpired)
   const [products, setProducts] = useState<Product[]>([])
@@ -35,6 +34,64 @@ export default function Home() {
 
   // Initial data load
   useEffect(() => {
+    // Check admin auth FIRST — if authenticated, skip loading customer data
+    fetch('/api/admin/verify', { method: 'POST' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => {
+        if (d?.authenticated) {
+          setAuth(d.admin)
+          // If we're authenticated, go to admin dashboard immediately
+          if (useNav.getState().view !== 'admin') {
+            useNav.getState().setView('admin')
+          }
+          setLoading(false) // Skip customer data loading for admin
+        } else if (d?.expired) {
+          useAdmin.getState().setSessionExpired(d.reason || 'inactivity')
+          // Load customer data since admin session expired
+          loadCustomerData()
+        } else {
+          // Not authenticated — clear auth and load customer data
+          useAdmin.getState().logout()
+          // If the view was 'admin', reset to home
+          if (useNav.getState().view === 'admin' || useNav.getState().view === 'admin-login') {
+            useNav.getState().setView('home')
+          }
+          loadCustomerData()
+        }
+      })
+      .catch(() => {
+        // Network error — if localStorage says authenticated, trust it
+        if (useAdmin.getState().isAuthenticated) {
+          if (useNav.getState().view !== 'admin') {
+            useNav.getState().setView('admin')
+          }
+        }
+        setLoading(false)
+      })
+
+    // Check URL for admin view (SPA — no reload)
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.slice(1)
+      if (hash === 'admin') {
+        setView('admin-login')
+        window.history.replaceState(null, '', window.location.pathname + window.location.search)
+      }
+      const params = new URLSearchParams(window.location.search)
+      const v = params.get('view')
+      if (v === 'shop') setView('shop')
+      if (v === 'admin') {
+        const tab = params.get('tab')
+        const order = params.get('order')
+        if (tab) useAdmin.getState().setPendingAdminTab(tab)
+        if (order) useAdmin.getState().setHighlightOrderId(order)
+        // Don't set view here — the verify call will handle the redirect
+        window.history.replaceState(null, '', window.location.pathname)
+      }
+    }
+  }, [])
+
+  // Load customer-facing data (only when needed)
+  function loadCustomerData() {
     Promise.all([
       fetch('/api/products?limit=20').then((r) => r.json()),
       fetch('/api/categories').then((r) => r.json()),
@@ -50,70 +107,20 @@ export default function Home() {
         setShopInfo(info.value)
       })
       .finally(() => setLoading(false))
+  }
 
-    // Check admin auth on mount — verify cookie with server
-    // The admin store now persists to localStorage, so if the user was
-    // previously logged in, the store will have isAuthenticated=true.
-    // We verify with the server to make sure the cookie is still valid.
-    fetch('/api/admin/verify', { method: 'POST' })
-      .then((r) => r.ok ? r.json() : null)
-      .then((d) => {
-        if (d?.authenticated) {
-          setAuth(d.admin)
-          // If the store says we're authenticated but the view isn't admin,
-          // and we're on admin-login, redirect to admin dashboard
-          if (useNav.getState().view === 'admin-login') {
-            useNav.getState().setView('admin')
-          }
-        } else if (d?.expired) {
-          useAdmin.getState().setSessionExpired(d.reason || 'inactivity')
-        } else {
-          // Cookie is gone or invalid — clear the persisted auth state
-          useAdmin.getState().logout()
-        }
-      })
-      .catch(() => {
-        // Network error — don't clear auth (might be temporary)
-        // The persisted localStorage auth will keep the admin logged in
-        // until the network recovers
-      })
-
-    // Check URL for admin view (SPA — no reload)
-    if (typeof window !== 'undefined') {
-      const hash = window.location.hash.slice(1)
-      if (hash === 'admin') {
-        setView('admin-login')
-        // Clear the hash so back button doesn't re-trigger
-        window.history.replaceState(null, '', window.location.pathname + window.location.search)
-      }
-      // PWA shortcut / notification click: ?view=admin&tab=orders&order=ID
-      const params = new URLSearchParams(window.location.search)
-      const v = params.get('view')
-      if (v === 'shop') setView('shop')
-      if (v === 'admin') {
-        // Read tab and order params for notification click navigation
-        const tab = params.get('tab')
-        const order = params.get('order')
-        if (tab) useAdmin.getState().setPendingAdminTab(tab)
-        if (order) useAdmin.getState().setHighlightOrderId(order)
-        // Navigate to admin-login (will redirect to admin dashboard if already authenticated)
-        setView('admin-login')
-        // Clear the query params so back button doesn't re-trigger
-        window.history.replaceState(null, '', window.location.pathname)
-      }
-    }
-  }, [setView, setAuth])
-
-  // Redirect to admin dashboard if authenticated and on admin-login
-  // Redirect to admin login if not authenticated and trying to view admin dashboard
-  // Subscribes to isAuthenticated + sessionExpired reactively so the redirect
-  // fires immediately when login succeeds (no full page reload needed).
+  // Redirect logic
   useEffect(() => {
     if (view === 'admin-login' && isAuthenticated && !sessionExpired) setView('admin')
     if (view === 'admin' && (!isAuthenticated || sessionExpired)) setView('admin-login')
   }, [view, setView, isAuthenticated, sessionExpired])
 
-  // Loading screen
+  // If admin is authenticated, show admin dashboard immediately (no loading screen)
+  if (isAuthenticated && !sessionExpired && (view === 'admin' || view === 'admin-login')) {
+    return <AdminDashboard />
+  }
+
+  // Loading screen (only for customer views)
   if (loading) {
     return (
       <div className="min-h-screen grid place-items-center bg-background">
@@ -131,7 +138,7 @@ export default function Home() {
     )
   }
 
-  // Admin views (no header/footer)
+  // Admin login page
   if (view === 'admin-login') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-brand-cream via-white to-brand-green/5">
@@ -142,6 +149,7 @@ export default function Home() {
     )
   }
 
+  // Admin dashboard
   if (view === 'admin') {
     return <AdminDashboard />
   }
