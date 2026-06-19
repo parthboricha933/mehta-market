@@ -12,9 +12,7 @@ import { CheckoutPage } from '@/components/mehta/CheckoutPage'
 import { OrderSuccessPage } from '@/components/mehta/OrderSuccessPage'
 import { CartDrawer } from '@/components/mehta/CartDrawer'
 import { FloatingButtons } from '@/components/mehta/FloatingButtons'
-import { AdminLoginPage } from '@/components/mehta/AdminLoginPage'
-import { AdminDashboard } from '@/components/mehta/AdminDashboard'
-import { SessionExpiredModal } from '@/components/mehta/admin/SessionExpiredModal'
+import { AdminApp } from '@/components/mehta/AdminApp'
 import { useNav } from '@/lib/stores/nav'
 import { useAdmin } from '@/lib/stores/admin'
 import type { Product, Category, OfferPopup as OfferPopupType, ShopInfo } from '@/lib/types'
@@ -22,9 +20,6 @@ import type { Product, Category, OfferPopup as OfferPopupType, ShopInfo } from '
 export default function Home() {
   const view = useNav((s) => s.view)
   const setView = useNav((s) => s.setView)
-  const setAuth = useAdmin((s) => s.setAuth)
-  const isAuthenticated = useAdmin((s) => s.isAuthenticated)
-  const sessionExpired = useAdmin((s) => s.sessionExpired)
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [offerPopup, setOfferPopup] = useState<OfferPopupType | null>(null)
@@ -32,66 +27,34 @@ export default function Home() {
   const [shopInfo, setShopInfo] = useState<ShopInfo | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Initial data load
+  // Check URL hash/query on mount for admin access
   useEffect(() => {
-    // Check admin auth FIRST — if authenticated, skip loading customer data
-    fetch('/api/admin/verify', { method: 'POST' })
-      .then((r) => r.ok ? r.json() : null)
-      .then((d) => {
-        if (d?.authenticated) {
-          setAuth(d.admin)
-          // If we're authenticated, go to admin dashboard immediately
-          if (useNav.getState().view !== 'admin') {
-            useNav.getState().setView('admin')
-          }
-          setLoading(false) // Skip customer data loading for admin
-        } else if (d?.expired) {
-          useAdmin.getState().setSessionExpired(d.reason || 'inactivity')
-          // Load customer data since admin session expired
-          loadCustomerData()
-        } else {
-          // Not authenticated — clear auth and load customer data
-          useAdmin.getState().logout()
-          // If the view was 'admin', reset to home
-          if (useNav.getState().view === 'admin' || useNav.getState().view === 'admin-login') {
-            useNav.getState().setView('home')
-          }
-          loadCustomerData()
-        }
-      })
-      .catch(() => {
-        // Network error — if localStorage says authenticated, trust it
-        if (useAdmin.getState().isAuthenticated) {
-          if (useNav.getState().view !== 'admin') {
-            useNav.getState().setView('admin')
-          }
-        }
-        setLoading(false)
-      })
-
-    // Check URL for admin view (SPA — no reload)
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.slice(1)
       if (hash === 'admin') {
         setView('admin-login')
         window.history.replaceState(null, '', window.location.pathname + window.location.search)
       }
+
       const params = new URLSearchParams(window.location.search)
       const v = params.get('view')
-      if (v === 'shop') setView('shop')
       if (v === 'admin') {
         const tab = params.get('tab')
         const order = params.get('order')
         if (tab) useAdmin.getState().setPendingAdminTab(tab)
         if (order) useAdmin.getState().setHighlightOrderId(order)
-        // Don't set view here — the verify call will handle the redirect
+        setView('admin-login')
         window.history.replaceState(null, '', window.location.pathname)
       }
+      if (v === 'shop') setView('shop')
     }
-  }, [])
+  }, [setView])
 
-  // Load customer-facing data (only when needed)
-  function loadCustomerData() {
+  // Load customer data (only matters for customer views — admin route skips this)
+  useEffect(() => {
+    // Skip customer data loading if we're on admin route
+    if (view === 'admin' || view === 'admin-login') return
+
     Promise.all([
       fetch('/api/products?limit=20').then((r) => r.json()),
       fetch('/api/categories').then((r) => r.json()),
@@ -107,20 +70,20 @@ export default function Home() {
         setShopInfo(info.value)
       })
       .finally(() => setLoading(false))
+  }, [view])
+
+  // ============================================
+  // ADMIN PANEL — completely separate from customer site
+  // Renders ONLY admin code. No customer data, no header/footer.
+  // ============================================
+  if (view === 'admin' || view === 'admin-login') {
+    return <AdminApp />
   }
 
-  // Redirect logic
-  useEffect(() => {
-    if (view === 'admin-login' && isAuthenticated && !sessionExpired) setView('admin')
-    if (view === 'admin' && (!isAuthenticated || sessionExpired)) setView('admin-login')
-  }, [view, setView, isAuthenticated, sessionExpired])
+  // ============================================
+  // CUSTOMER WEBSITE — below
+  // ============================================
 
-  // If admin is authenticated, show admin dashboard immediately (no loading screen)
-  if (isAuthenticated && !sessionExpired && (view === 'admin' || view === 'admin-login')) {
-    return <AdminDashboard />
-  }
-
-  // Loading screen (only for customer views)
   if (loading) {
     return (
       <div className="min-h-screen grid place-items-center bg-background">
@@ -138,23 +101,6 @@ export default function Home() {
     )
   }
 
-  // Admin login page
-  if (view === 'admin-login') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-brand-cream via-white to-brand-green/5">
-        <AdminLoginPage />
-        <OfferPopup popup={offerPopup} />
-        <SessionExpiredModal />
-      </div>
-    )
-  }
-
-  // Admin dashboard
-  if (view === 'admin') {
-    return <AdminDashboard />
-  }
-
-  // Customer views (with header/footer)
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <AnnouncementBar messages={announcements} />
@@ -174,7 +120,6 @@ export default function Home() {
 
       <Footer shopInfo={shopInfo} />
 
-      {/* Global overlays */}
       <CartDrawer shopInfo={shopInfo} />
       <FloatingButtons shopInfo={shopInfo} />
       <OfferPopup popup={offerPopup} />

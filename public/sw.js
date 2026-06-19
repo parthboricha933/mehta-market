@@ -74,8 +74,8 @@ self.addEventListener('push', (event) => {
   const body = payload.notification?.body || payload.body || 'A new order has been placed'
   const orderId = payload.data?.orderId || payload.orderId
   const targetUrl = orderId
-    ? `/?view=admin&tab=orders&order=${orderId}`
-    : '/?view=admin&tab=orders'
+    ? `/?view=admin&tab=orders&order=${orderId}#admin`
+    : `/?view=admin&tab=orders#admin`
 
   const options = {
     body,

@@ -105,7 +105,7 @@ async function sendViaFCM(fcm: any, payload: PushOrderPayload): Promise<boolean>
         body: `Order: ${payload.orderNumber}\nCustomer: ${payload.customerName}\nAmount: ₹${payload.total.toFixed(0)}`,
       },
       data: {
-        url: `/?view=admin&tab=orders&order=${payload.orderId}`,
+        url: `/?view=admin&tab=orders&order=${payload.orderId}#admin`,
         orderId: payload.orderId,
         orderNumber: payload.orderNumber,
         customerName: payload.customerName,
@@ -143,7 +143,7 @@ async function sendViaVapid(payload: PushOrderPayload): Promise<void> {
     body: `Order: ${payload.orderNumber}\nCustomer: ${payload.customerName}\nAmount: ₹${payload.total.toFixed(0)}`,
     tag: `order-${payload.orderNumber}`,
     data: {
-      url: `/?view=admin&tab=orders&order=${payload.orderId}`,
+      url: `/?view=admin&tab=orders&order=${payload.orderId}#admin`,
       orderId: payload.orderId,
     },
     icon: '/icons/icon-192.png',
