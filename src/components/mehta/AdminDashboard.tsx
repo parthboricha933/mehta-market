@@ -22,6 +22,7 @@ import { SessionExpiredModal } from './admin/SessionExpiredModal'
 import { useAdminSSE, type NewOrderEvent } from '@/lib/use-admin-sse'
 import { useInactivityLogout } from '@/lib/use-inactivity-logout'
 import { usePushNotifications } from '@/lib/use-push-notifications'
+import { useFCMNotifications } from '@/lib/use-fcm-notifications'
 import { primeAudioOnUserInteraction } from '@/lib/sound'
 import { toast } from 'sonner'
 
@@ -43,9 +44,12 @@ export function AdminDashboard() {
   }, [pendingAdminTab, setPendingAdminTab])
 
   // Register service worker + subscribe to push notifications (PWA).
-  // Works even when the tab is closed (uses Web Push API + VAPID).
-  // Only enabled while authenticated AND not session-expired.
   const { showLocalNotification } = usePushNotifications(!sessionExpired)
+
+  // FCM (Firebase Cloud Messaging) — primary push notification channel.
+  // Works when tab is closed, browser minimized, phone locked, overnight.
+  // Only the active admin device receives notifications.
+  useFCMNotifications(!sessionExpired)
 
   // Connect to SSE for real-time new-order notifications.
   // Uses Postgres LISTEN/NOTIFY — works on both sandbox AND Vercel.

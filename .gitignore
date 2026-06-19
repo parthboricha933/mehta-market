@@ -86,3 +86,4 @@ screenshot-*.png
 
 # Empty db folder (created at runtime)
 /db/
+upload/

@@ -24,6 +24,8 @@ export interface ActiveSession {
   pushEndpoint?: string
   pushKeys?: string // JSON-encoded keys object
   pushExpirationTime?: number | null
+  // FCM token for the ACTIVE device (Firebase Cloud Messaging)
+  fcmToken?: string
 }
 
 /**
@@ -131,8 +133,6 @@ export async function registerDevicePush(
 /**
  * Get the push subscription for the active device.
  * Returns null if no active session or no push subscription registered.
- * This is what the push notification system uses to send notifications
- * ONLY to the active device.
  */
 export async function getActiveDevicePush(): Promise<{
   endpoint: string
@@ -151,6 +151,47 @@ export async function getActiveDevicePush(): Promise<{
   } catch {
     return null
   }
+}
+
+/**
+ * Register/update FCM token for the active device.
+ * Called when the browser gets an FCM token from Firebase Messaging.
+ * Only the active device's FCM token is stored — old devices don't receive FCM push.
+ */
+export async function registerFCMToken(sessionToken: string, fcmToken: string): Promise<boolean> {
+  const setting = await db.setting.findFirst({ where: { key: SESSION_KEY } })
+  if (!setting) return false
+
+  try {
+    const session: ActiveSession = JSON.parse(setting.value)
+    if (session.sessionToken !== sessionToken) return false
+
+    session.fcmToken = fcmToken || undefined
+
+    await db.setting.update({
+      where: { key: SESSION_KEY },
+      data: { value: JSON.stringify(session) },
+    })
+
+    if (fcmToken) {
+      console.log('[session] FCM token registered for active device')
+    } else {
+      console.log('[session] FCM token cleared')
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Get the FCM token for the active device.
+ * Returns null if no active session or no FCM token registered.
+ */
+export async function getActiveFCMToken(): Promise<string | null> {
+  const session = await getActiveSession()
+  if (!session || !session.fcmToken) return null
+  return session.fcmToken
 }
 
 /**

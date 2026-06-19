@@ -7,6 +7,43 @@
 const CACHE_NAME = 'mehta-market-v1'
 const OFFLINE_URL = '/'
 
+// Import Firebase Messaging service worker for background push notifications
+importScripts('https://www.gstatic.com/firebasejs/12.15.0/firebase-app-compat.js')
+importScripts('https://www.gstatic.com/firebasejs/12.15.0/firebase-messaging-compat.js')
+
+firebase.initializeApp({
+  apiKey: "AIzaSyAwC2865JnZ-REsUIugIMVCEVgLXX2gKU0",
+  authDomain: "mehta-supermall.firebaseapp.com",
+  projectId: "mehta-supermall",
+  storageBucket: "mehta-supermall.firebasestorage.app",
+  messagingSenderId: "896835776502",
+  appId: "1:896835776502:web:b932dad9ba182151af21d7",
+})
+
+const messaging = firebase.messaging()
+
+// Handle FCM background messages (when tab is closed/minimized)
+messaging.onBackgroundMessage((payload) => {
+  console.log('[sw] FCM background message:', payload)
+  const notificationTitle = payload.notification?.title || '🔔 New Order Received'
+  const notificationBody = payload.notification?.body || 'A new order has been placed'
+  const orderId = payload.data?.orderId || ''
+
+  self.registration.showNotification(notificationTitle, {
+    body: notificationBody,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: `order-${orderId || 'new'}`,
+    renotify: true,
+    data: { url: `/?view=admin&tab=orders&order=${orderId}`, orderId },
+    vibrate: [200, 100, 200],
+    actions: [
+      { action: 'view', title: 'View Order' },
+      { action: 'dismiss', title: 'Dismiss' },
+    ],
+  })
+})
+
 self.addEventListener('install', (event) => {
   self.skipWaiting()
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.add(OFFLINE_URL)))
