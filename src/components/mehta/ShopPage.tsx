@@ -5,18 +5,24 @@ import { ProductCard } from './ProductCard'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Search, SlidersHorizontal, X, LayoutGrid } from 'lucide-react'
+import { Search, SlidersHorizontal, X, LayoutGrid, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { useNav } from '@/lib/stores/nav'
 import type { Product, Category } from '@/lib/types'
+
+const PAGE_SIZE = 24 // Products per page — keeps DOM light and images fast
 
 export function ShopPage({ categories }: { categories: Category[] }) {
   const { selectedCategory, setCategory, searchQuery, setSearch } = useNav()
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [sortBy, setSortBy] = useState<'newest' | 'price-low' | 'price-high' | 'name'>('newest')
+  const [page, setPage] = useState(1)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE) // For "Load More" pagination
 
   useEffect(() => {
     setLoading(true)
+    setPage(1)
+    setVisibleCount(PAGE_SIZE)
     const params = new URLSearchParams()
     if (selectedCategory) params.set('category', selectedCategory)
     if (searchQuery) params.set('search', searchQuery)
@@ -26,6 +32,12 @@ export function ShopPage({ categories }: { categories: Category[] }) {
       .catch(() => setProducts([]))
       .finally(() => setLoading(false))
   }, [selectedCategory, searchQuery])
+
+  // Reset visible count when sort changes
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+    setPage(1)
+  }, [sortBy])
 
   const sorted = useMemo(() => {
     const arr = [...products]
@@ -37,7 +49,13 @@ export function ShopPage({ categories }: { categories: Category[] }) {
     }
   }, [products, sortBy])
 
+  const visible = sorted.slice(0, visibleCount)
+  const hasMore = visibleCount < sorted.length
   const activeCat = categories.find((c) => c.slug === selectedCategory)
+
+  const loadMore = () => {
+    setVisibleCount((c) => c + PAGE_SIZE)
+  }
 
   return (
     <div className="container mx-auto px-4 py-6">
@@ -50,6 +68,9 @@ export function ShopPage({ categories }: { categories: Category[] }) {
         <p className="text-sm text-muted-foreground">
           {loading ? 'Loading...' : `${sorted.length} ${sorted.length === 1 ? 'item' : 'items'} available`}
           {activeCat && <span className="ml-1">in {activeCat.name}</span>}
+          {!loading && visibleCount < sorted.length && (
+            <span className="ml-2 text-brand-green">• Showing {visible.length}</span>
+          )}
         </p>
       </div>
 
@@ -144,11 +165,49 @@ export function ShopPage({ categories }: { categories: Category[] }) {
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-          {sorted.map((p) => (
-            <ProductCard key={p.id} product={p} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+            {visible.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+
+          {/* Load More button */}
+          {hasMore && (
+            <div className="text-center mt-8">
+              <Button
+                onClick={loadMore}
+                size="lg"
+                variant="outline"
+                className="border-brand-green text-brand-green hover:bg-brand-green hover:text-white font-bold px-8"
+              >
+                Load More Products
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                Showing {visible.length} of {sorted.length} products
+              </p>
+            </div>
+          )}
+
+          {/* Back to top when at the end */}
+          {!hasMore && sorted.length > PAGE_SIZE && (
+            <div className="text-center mt-8">
+              <Button
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                size="lg"
+                variant="outline"
+                className="font-bold px-8"
+              >
+                <ChevronLeft className="h-4 w-4 mr-1 rotate-90" />
+                Back to Top
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                You&apos;ve seen all {sorted.length} products
+              </p>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

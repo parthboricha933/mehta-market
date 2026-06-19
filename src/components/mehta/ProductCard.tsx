@@ -63,6 +63,16 @@ export function ProductCard({ product }: { product: Product }) {
           alt={product.name}
           loading="lazy"
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+          onError={(e) => {
+            // Fallback: if image fails to load, swap to a data-uri placeholder
+            const target = e.target as HTMLImageElement
+            if (!target.dataset.errored) {
+              target.dataset.errored = '1'
+              target.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+                '<svg width="400" height="400" xmlns="http://www.w3.org/2000/svg"><rect width="400" height="400" fill="#f3f4f6"/><text x="200" y="200" font-size="80" text-anchor="middle" dominant-baseline="middle">📦</text><text x="200" y="280" font-size="18" text-anchor="middle" fill="#6b7280" font-family="Arial">No Image</text></svg>'
+              )
+            }
+          }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
       </div>
