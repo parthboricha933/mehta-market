@@ -62,6 +62,8 @@ server.log
 /public/uploads/*
 !/public/uploads/products/
 !/public/uploads/products/*.svg
+!/public/uploads/real/
+!/public/uploads/real/*.jpg
 
 # Scripts logs
 service.log
