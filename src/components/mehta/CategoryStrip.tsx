@@ -1,13 +1,17 @@
 'use client'
 
 import {
-  ShoppingBasket, Apple, Carrot, Milk, Cookie, CupSoda, Home, LayoutGrid
+  ShoppingBasket, Apple, Carrot, Milk, Cookie, CupSoda, Home, LayoutGrid,
+  Wheat, Sprout, Droplet, Coffee, Heart, GlassWater, Snowflake, ShowerHead,
+  SprayCan, Baby
 } from 'lucide-react'
 import { useNav } from '@/lib/stores/nav'
 import type { Category } from '@/lib/types'
 
 const ICONS: Record<string, any> = {
-  ShoppingBasket, Apple, Carrot, Milk, Cookie, CupSoda, Home
+  ShoppingBasket, Apple, Carrot, Milk, Cookie, CupSoda, Home,
+  Wheat, Sprout, Droplet, Coffee, Heart, GlassWater, Snowflake, ShowerHead,
+  SprayCan, Baby
 }
 
 export function CategoryStrip({ categories }: { categories: Category[] }) {
@@ -34,7 +38,7 @@ export function CategoryStrip({ categories }: { categories: Category[] }) {
         </button>
       </div>
 
-      <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 sm:gap-3">
+      <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-2 sm:gap-3">
         {categories.map((c) => {
           const Icon = ICONS[c.icon || ''] || ShoppingBasket
           return (
