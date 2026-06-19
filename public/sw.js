@@ -33,7 +33,7 @@ self.addEventListener('push', (event) => {
   }
 
   // Handle FCM format (notification + data) vs Web Push format
-  const title = payload.notification?.title || payload.title || '🛒 New Order Received!'
+  const title = payload.notification?.title || payload.title || '🔔 New Order Received'
   const body = payload.notification?.body || payload.body || 'A new order has been placed'
   const orderId = payload.data?.orderId || payload.orderId
   const targetUrl = orderId
@@ -87,7 +87,7 @@ self.addEventListener('message', (event) => {
   if (event.data?.type === 'SHOW_NOTIFICATION') {
     const payload = event.data.payload || {}
     const orderId = payload.orderId
-    const title = payload.title || '🛒 New Order Received!'
+    const title = payload.title || '🔔 New Order Received'
     const options = {
       body: payload.body || 'A new order has been placed',
       icon: '/icons/icon-192.png',

@@ -79,8 +79,8 @@ export function useAdminSSE({ onNewOrder, enabled = true }: UseAdminSSEOptions) 
           navigator.serviceWorker?.controller?.postMessage({
             type: 'SHOW_NOTIFICATION',
             payload: {
-              title: '🛒 New Order Received!',
-              body: `Order ${event.orderNumber}\n${event.customerName} • ₹${event.total.toFixed(0)}`,
+              title: '🔔 New Order Received',
+              body: `Order: ${event.orderNumber}\nCustomer: ${event.customerName}\nAmount: ₹${event.total.toFixed(0)}`,
               orderId: event.orderId,
             },
           })

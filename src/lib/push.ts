@@ -1,15 +1,16 @@
-// Push notification helper with delivery logging.
-// Uses Web Push (VAPID) as primary mechanism — works even when tab is closed.
-// If Firebase credentials are configured, also sends via FCM for maximum reliability.
+// Push notification helper — sends ONLY to the currently logged-in admin device.
+// Uses the session manager to find the active device's push subscription.
+// Old/logged-out devices do NOT receive notifications.
 
 import webpush from 'web-push'
 import { db } from '@/lib/db'
+import { getActiveDevicePush } from '@/lib/session-manager'
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || ''
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || ''
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@mehtasupermarket.com'
 
-// Firebase FCM credentials (optional — if set, FCM is used as an additional channel)
+// Firebase FCM (optional — for maximum reliability)
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || ''
 const FIREBASE_CLIENT_EMAIL = process.env.FIREBASE_CLIENT_EMAIL || ''
 const FIREBASE_PRIVATE_KEY = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n') || ''
@@ -61,83 +62,79 @@ export interface PushOrderPayload {
 }
 
 /**
- * Send push notification to ALL subscribed admin devices.
- * Uses both Web Push (VAPID) and FCM (if configured) for maximum reliability.
- * Logs delivery status for debugging.
+ * Send push notification to the ACTIVE admin device ONLY.
+ * If no device is active (admin logged out, or no push subscription registered),
+ * the notification is skipped — old devices do NOT receive it.
  */
 export async function sendOrderPushNotification(payload: PushOrderPayload): Promise<void> {
   console.log('[push] Sending notification for order:', payload.orderNumber)
 
-  // --- Web Push (VAPID) ---
+  // --- Send to active device via Web Push (VAPID) ---
   configureVapid()
   if (vapidConfigured) {
-    await sendViaWebPush(payload)
+    await sendToActiveDevice(payload)
   }
 
-  // --- FCM (if configured) ---
+  // --- Also send via FCM if configured (for Android/PWA background) ---
   const fcm = await initFCM()
   if (fcm) {
     await sendViaFCM(fcm, payload)
   }
 }
 
-async function sendViaWebPush(payload: PushOrderPayload): Promise<void> {
+/**
+ * Send Web Push to the ACTIVE device only.
+ * Uses session-manager to get the push subscription for the currently logged-in device.
+ */
+async function sendToActiveDevice(payload: PushOrderPayload): Promise<void> {
+  const activeDevice = await getActiveDevicePush()
+  if (!activeDevice) {
+    console.log('[push] No active device with push subscription — skipping (admin not logged in or no push permission)')
+    return
+  }
+
+  const pushPayload = JSON.stringify({
+    title: '🔔 New Order Received',
+    body: `Order: ${payload.orderNumber}\nCustomer: ${payload.customerName}\nAmount: ₹${payload.total.toFixed(0)}`,
+    tag: `order-${payload.orderNumber}`,
+    data: {
+      url: `/?view=admin&tab=orders&order=${payload.orderId}`,
+      orderId: payload.orderId,
+    },
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+  })
+
   try {
-    const subscriptions = await db.pushSubscription.findMany()
-    if (subscriptions.length === 0) {
-      console.log('[push] No VAPID subscriptions — skipping web push')
-      return
+    const subscription = {
+      endpoint: activeDevice.endpoint,
+      expirationTime: activeDevice.expirationTime,
+      keys: activeDevice.keys,
     }
-
-    const pushPayload = JSON.stringify({
-      title: '🛒 New Order Received!',
-      body: `Order ${payload.orderNumber}\n${payload.customerName} • ₹${payload.total.toFixed(0)}\n${payload.itemCount} ${payload.itemCount === 1 ? 'item' : 'items'}`,
-      tag: `order-${payload.orderNumber}`,
-      data: { url: `/?view=admin&tab=orders&order=${payload.orderId}`, orderId: payload.orderId },
-      icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
-    })
-
-    console.log(`[push] VAPID: sending to ${subscriptions.length} device(s)`)
-
-    let succeeded = 0
-    let failed = 0
-
-    for (const sub of subscriptions) {
-      try {
-        const subscription = {
-          endpoint: sub.endpoint,
-          expirationTime: sub.expirationTime ? sub.expirationTime.getTime() : null,
-          keys: JSON.parse(sub.keys),
-        }
-        await webpush.sendNotification(subscription, pushPayload)
-        succeeded++
-        console.log('[push] VAPID ✅ delivered to:', sub.endpoint.slice(-30))
-      } catch (err: any) {
-        failed++
-        if (err.statusCode === 410 || err.statusCode === 404) {
-          // Subscription expired — delete it
-          console.log('[push] VAPID ❌ expired, deleting:', sub.endpoint.slice(-30))
-          await db.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {})
-        } else {
-          console.error('[push] VAPID ❌ failed:', err.statusCode, err.message?.slice(0, 80))
-        }
-      }
+    await webpush.sendNotification(subscription, pushPayload)
+    console.log('[push] ✅ Delivered to active device:', activeDevice.endpoint.slice(-30))
+  } catch (err: any) {
+    if (err.statusCode === 410 || err.statusCode === 404) {
+      console.log('[push] ❌ Active device subscription expired — clearing')
+      // The subscription is invalid — the browser will re-subscribe on next visit
+    } else {
+      console.error('[push] ❌ Failed:', err.statusCode, err.message?.slice(0, 80))
     }
-
-    console.log(`[push] VAPID result: ${succeeded} delivered, ${failed} failed`)
-  } catch (e: any) {
-    console.error('[push] VAPID error:', e.message)
   }
 }
 
+/**
+ * Send via FCM to the "admin" topic.
+ * Only devices subscribed to this topic receive it.
+ * On login, the device subscribes to the "admin" topic.
+ * On logout, the device unsubscribes.
+ */
 async function sendViaFCM(fcm: any, payload: PushOrderPayload): Promise<void> {
   try {
-    // FCM sends to all devices subscribed to the "admin" topic
     const message = {
       notification: {
-        title: '🛒 New Order Received!',
-        body: `Order ${payload.orderNumber} • ${payload.customerName} • ₹${payload.total.toFixed(0)}`,
+        title: '🔔 New Order Received',
+        body: `Order: ${payload.orderNumber}\nCustomer: ${payload.customerName}\nAmount: ₹${payload.total.toFixed(0)}`,
       },
       data: {
         url: `/?view=admin&tab=orders&order=${payload.orderId}`,

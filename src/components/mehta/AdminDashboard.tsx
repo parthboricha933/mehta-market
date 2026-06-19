@@ -66,8 +66,8 @@ export function AdminDashboard() {
       // For the "tab fully closed" case, the Web Push API handles it separately.
       if (typeof document !== 'undefined' && document.hidden) {
         showLocalNotification({
-          title: '🛒 New Order Received!',
-          body: `Order ${event.orderNumber}\n${event.customerName} • ₹${event.total.toFixed(0)}`,
+          title: '🔔 New Order Received',
+          body: `Order: ${event.orderNumber}\nCustomer: ${event.customerName}\nAmount: ₹${event.total.toFixed(0)}`,
           tag: `order-${event.orderNumber}`,
         })
       }
