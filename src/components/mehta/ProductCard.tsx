@@ -61,7 +61,7 @@ export function ProductCard({ product }: { product: Product }) {
         <img
           src={image}
           alt={product.name}
-          loading="lazy"
+          loading="eager"
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
           onError={(e) => {
             // Fallback: if image fails to load, swap to a data-uri placeholder
