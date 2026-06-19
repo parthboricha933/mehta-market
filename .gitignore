@@ -59,7 +59,9 @@ server.log
 *.sqlite3
 
 # User uploads (runtime-generated, should not be in repo)
-/public/uploads/
+/public/uploads/*
+!/public/uploads/products/
+!/public/uploads/products/*.svg
 
 # Scripts logs
 service.log
